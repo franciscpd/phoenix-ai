@@ -1,0 +1,104 @@
+defmodule PhoenixAI.Providers.AnthropicTest do
+  use ExUnit.Case, async: true
+
+  alias PhoenixAI.Providers.Anthropic
+  alias PhoenixAI.{Response, ToolCall}
+
+  defp load_fixture(name) do
+    Path.join([__DIR__, "../../support/fixtures/anthropic", name])
+    |> File.read!()
+    |> Jason.decode!()
+  end
+
+  describe "parse_response/1" do
+    test "parses a simple text completion" do
+      fixture = load_fixture("messages_completion.json")
+      response = Anthropic.parse_response(fixture)
+
+      assert %Response{} = response
+      assert response.content == "Hello! How can I help you today?"
+      assert response.finish_reason == "end_turn"
+      assert response.model == "claude-sonnet-4-5-20250514"
+      assert response.usage["input_tokens"] == 10
+      assert response.usage["output_tokens"] == 9
+      assert response.tool_calls == []
+      assert response.provider_response == fixture
+    end
+
+    test "parses a response with tool_use blocks" do
+      fixture = load_fixture("messages_with_tool_use.json")
+      response = Anthropic.parse_response(fixture)
+
+      assert response.content == "Let me check the weather for you."
+      assert response.finish_reason == "tool_use"
+      assert [%ToolCall{} = tc] = response.tool_calls
+      assert tc.id == "toolu_01A09q90qw90lq917835lgs0"
+      assert tc.name == "get_weather"
+      assert tc.arguments == %{"city" => "Lisbon"}
+    end
+
+    test "extracts error message from Anthropic error response" do
+      fixture = load_fixture("messages_error_401.json")
+      message = get_in(fixture, ["error", "message"])
+      assert message == "invalid x-api-key"
+    end
+  end
+
+  describe "format_messages/1" do
+    test "converts user and assistant messages to Anthropic format" do
+      messages = [
+        %PhoenixAI.Message{role: :user, content: "Hello"},
+        %PhoenixAI.Message{role: :assistant, content: "Hi there!"}
+      ]
+
+      formatted = Anthropic.format_messages(messages)
+
+      assert formatted == [
+               %{"role" => "user", "content" => "Hello"},
+               %{"role" => "assistant", "content" => "Hi there!"}
+             ]
+    end
+
+    test "excludes system messages from formatted output" do
+      messages = [
+        %PhoenixAI.Message{role: :system, content: "You are helpful."},
+        %PhoenixAI.Message{role: :user, content: "Hello"}
+      ]
+
+      formatted = Anthropic.format_messages(messages)
+
+      assert formatted == [
+               %{"role" => "user", "content" => "Hello"}
+             ]
+    end
+  end
+
+  describe "extract_system/1" do
+    test "extracts single system message" do
+      messages = [
+        %PhoenixAI.Message{role: :system, content: "You are helpful."},
+        %PhoenixAI.Message{role: :user, content: "Hello"}
+      ]
+
+      assert Anthropic.extract_system(messages) == "You are helpful."
+    end
+
+    test "concatenates multiple system messages" do
+      messages = [
+        %PhoenixAI.Message{role: :system, content: "You are helpful."},
+        %PhoenixAI.Message{role: :system, content: "Be concise."},
+        %PhoenixAI.Message{role: :user, content: "Hello"}
+      ]
+
+      assert Anthropic.extract_system(messages) == "You are helpful.\n\nBe concise."
+    end
+
+    test "returns nil when no system messages" do
+      messages = [
+        %PhoenixAI.Message{role: :user, content: "Hello"}
+      ]
+
+      assert Anthropic.extract_system(messages) == nil
+    end
+  end
+end
