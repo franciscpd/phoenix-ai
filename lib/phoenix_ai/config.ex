@@ -26,7 +26,9 @@ defmodule PhoenixAI.Config do
 
   defp env_opts(provider) do
     case Map.get(@env_vars, provider) do
-      nil -> []
+      nil ->
+        []
+
       env_var ->
         case System.get_env(env_var) do
           nil -> []
