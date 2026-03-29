@@ -1,5 +1,5 @@
 defmodule PhoenixAI.ConfigTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias PhoenixAI.Config
 

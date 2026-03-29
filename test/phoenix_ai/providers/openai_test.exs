@@ -36,6 +36,12 @@ defmodule PhoenixAI.Providers.OpenAITest do
       assert tc.name == "get_weather"
       assert tc.arguments == %{"city" => "Lisbon"}
     end
+
+    test "extracts error message from OpenAI error response" do
+      fixture = load_fixture("chat_error_401.json")
+      message = get_in(fixture, ["error", "message"])
+      assert message == "Incorrect API key provided."
+    end
   end
 
   describe "format_messages/1" do
@@ -61,6 +67,24 @@ defmodule PhoenixAI.Providers.OpenAITest do
       formatted = OpenAI.format_messages(messages)
 
       assert [%{"role" => "tool", "content" => "sunny", "tool_call_id" => "call_123"}] = formatted
+    end
+
+    test "preserves tool_calls on assistant messages" do
+      tc = %PhoenixAI.ToolCall{id: "call_1", name: "search", arguments: %{"q" => "elixir"}}
+
+      messages = [
+        %PhoenixAI.Message{role: :assistant, content: nil, tool_calls: [tc]}
+      ]
+
+      [formatted] = OpenAI.format_messages(messages)
+
+      assert formatted["role"] == "assistant"
+
+      assert [%{"id" => "call_1", "type" => "function", "function" => func}] =
+               formatted["tool_calls"]
+
+      assert func["name"] == "search"
+      assert func["arguments"] == ~s({"q":"elixir"})
     end
   end
 end

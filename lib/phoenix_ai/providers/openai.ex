@@ -7,26 +7,24 @@ defmodule PhoenixAI.Providers.OpenAI do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Config, Error, Message, Response, ToolCall}
+  alias PhoenixAI.{Error, Message, Response, ToolCall}
 
   @default_base_url "https://api.openai.com/v1"
 
   @impl PhoenixAI.Provider
   def chat(messages, opts \\ []) do
-    config = Config.resolve(:openai, opts)
-
-    api_key = Keyword.fetch!(config, :api_key)
-    model = Keyword.get(config, :model, "gpt-4o")
-    base_url = Keyword.get(config, :base_url, @default_base_url)
-    provider_options = Keyword.get(config, :provider_options, %{})
+    api_key = Keyword.fetch!(opts, :api_key)
+    model = Keyword.get(opts, :model, "gpt-4o")
+    base_url = Keyword.get(opts, :base_url, @default_base_url)
+    provider_options = Keyword.get(opts, :provider_options, %{})
 
     body =
       %{
         "model" => model,
         "messages" => format_messages(messages)
       }
-      |> maybe_put("temperature", Keyword.get(config, :temperature))
-      |> maybe_put("max_tokens", Keyword.get(config, :max_tokens))
+      |> maybe_put("temperature", Keyword.get(opts, :temperature))
+      |> maybe_put("max_tokens", Keyword.get(opts, :max_tokens))
       |> Map.merge(provider_options)
 
     case Req.post("#{base_url}/chat/completions",
@@ -88,31 +86,55 @@ defmodule PhoenixAI.Providers.OpenAI do
     %{"role" => "tool", "content" => content, "tool_call_id" => tool_call_id}
   end
 
+  defp format_message(%Message{role: :assistant, tool_calls: tool_calls} = msg)
+       when is_list(tool_calls) and tool_calls != [] do
+    %{
+      "role" => "assistant",
+      "content" => msg.content,
+      "tool_calls" => Enum.map(tool_calls, &format_tool_call/1)
+    }
+  end
+
   defp format_message(%Message{role: role, content: content}) do
     %{"role" => to_string(role), "content" => content}
+  end
+
+  defp format_tool_call(%ToolCall{} = tc) do
+    %{
+      "id" => tc.id,
+      "type" => "function",
+      "function" => %{
+        "name" => tc.name,
+        "arguments" => Jason.encode!(tc.arguments)
+      }
+    }
   end
 
   defp parse_tool_calls(nil), do: []
   defp parse_tool_calls([]), do: []
 
   defp parse_tool_calls(tool_calls) when is_list(tool_calls) do
-    Enum.map(tool_calls, fn tc ->
-      function = Map.get(tc, "function", %{})
-      name = Map.get(function, "name")
+    Enum.map(tool_calls, &parse_single_tool_call/1)
+  end
 
-      arguments =
-        case Map.get(function, "arguments") do
-          nil -> %{}
-          args when is_binary(args) -> Jason.decode!(args)
-          args when is_map(args) -> args
-        end
+  defp parse_single_tool_call(tc) do
+    function = Map.get(tc, "function", %{})
 
-      %ToolCall{
-        id: Map.get(tc, "id"),
-        name: name,
-        arguments: arguments
-      }
-    end)
+    %ToolCall{
+      id: Map.get(tc, "id"),
+      name: Map.get(function, "name"),
+      arguments: parse_arguments(Map.get(function, "arguments"))
+    }
+  end
+
+  defp parse_arguments(nil), do: %{}
+  defp parse_arguments(args) when is_map(args), do: args
+
+  defp parse_arguments(args) when is_binary(args) do
+    case Jason.decode(args) do
+      {:ok, parsed} -> parsed
+      {:error, _} -> %{"_raw" => args}
+    end
   end
 
   defp maybe_put(map, _key, nil), do: map

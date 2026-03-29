@@ -45,7 +45,13 @@ defmodule AI do
   def provider_module(mod) when is_atom(mod), do: mod
 
   defp resolve_provider(provider) when provider in @known_providers do
-    {:ok, provider_module(provider)}
+    mod = provider_module(provider)
+
+    if Code.ensure_loaded?(mod) do
+      {:ok, mod}
+    else
+      {:error, {:provider_not_implemented, provider}}
+    end
   end
 
   defp resolve_provider(mod) when is_atom(mod) do

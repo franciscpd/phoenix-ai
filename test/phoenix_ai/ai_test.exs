@@ -1,5 +1,5 @@
 defmodule AITest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Mox
 
@@ -38,6 +38,17 @@ defmodule AITest do
 
     test "passes through custom module directly" do
       assert AI.provider_module(PhoenixAI.MockProvider) == PhoenixAI.MockProvider
+    end
+
+    test "returns error for unimplemented known provider" do
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Hi"}],
+          provider: :anthropic,
+          api_key: "test"
+        )
+
+      assert {:error, {:provider_not_implemented, :anthropic}} = result
     end
 
     test "returns error for unknown provider atom" do
