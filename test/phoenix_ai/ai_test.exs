@@ -40,15 +40,50 @@ defmodule AITest do
       assert AI.provider_module(PhoenixAI.MockProvider) == PhoenixAI.MockProvider
     end
 
-    test "returns error for unimplemented known provider" do
+    test "resolves :anthropic to a loaded provider module" do
+      mod = AI.provider_module(:anthropic)
+      assert Code.ensure_loaded?(mod)
+    end
+
+    test "resolves :openrouter to a loaded provider module" do
+      mod = AI.provider_module(:openrouter)
+      assert Code.ensure_loaded?(mod)
+    end
+
+    test "delegates to Anthropic adapter via mock" do
+      expect(PhoenixAI.MockProvider, :chat, fn messages, opts ->
+        assert [%PhoenixAI.Message{role: :user, content: "Hi"}] = messages
+        assert opts[:model] == "claude-sonnet-4-5"
+        {:ok, %PhoenixAI.Response{content: "Bonjour!"}}
+      end)
+
       result =
         AI.chat(
           [%PhoenixAI.Message{role: :user, content: "Hi"}],
-          provider: :anthropic,
-          api_key: "test"
+          provider: PhoenixAI.MockProvider,
+          model: "claude-sonnet-4-5",
+          api_key: "test-key"
         )
 
-      assert {:error, {:provider_not_implemented, :anthropic}} = result
+      assert {:ok, %PhoenixAI.Response{content: "Bonjour!"}} = result
+    end
+
+    test "delegates to OpenRouter adapter via mock" do
+      expect(PhoenixAI.MockProvider, :chat, fn messages, opts ->
+        assert [%PhoenixAI.Message{role: :user, content: "Hi"}] = messages
+        assert opts[:model] == "anthropic/claude-sonnet-4-5"
+        {:ok, %PhoenixAI.Response{content: "Hello via OpenRouter!"}}
+      end)
+
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Hi"}],
+          provider: PhoenixAI.MockProvider,
+          model: "anthropic/claude-sonnet-4-5",
+          api_key: "test-key"
+        )
+
+      assert {:ok, %PhoenixAI.Response{content: "Hello via OpenRouter!"}} = result
     end
 
     test "returns error for unknown provider atom" do
