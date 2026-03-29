@@ -58,7 +58,7 @@ defmodule PhoenixAI.Providers.ProviderContractTest do
         response = unquote(provider).parse_response(fixture)
 
         assert is_list(response.tool_calls)
-        assert length(response.tool_calls) >= 1
+        assert response.tool_calls != []
 
         for tc <- response.tool_calls do
           assert %ToolCall{} = tc

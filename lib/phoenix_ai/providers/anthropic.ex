@@ -98,7 +98,7 @@ defmodule PhoenixAI.Providers.Anthropic do
     |> Enum.filter(&(&1.role == :system))
     |> case do
       [] -> nil
-      system_msgs -> system_msgs |> Enum.map(& &1.content) |> Enum.join("\n\n")
+      system_msgs -> Enum.map_join(system_msgs, "\n\n", & &1.content)
     end
   end
 
