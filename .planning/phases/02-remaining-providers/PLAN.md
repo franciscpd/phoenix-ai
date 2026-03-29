@@ -274,6 +274,15 @@ defmodule PhoenixAI.Providers.Anthropic do
 
   Supports the Messages API with automatic system message extraction,
   tool_use content block parsing, and configurable API version.
+
+  ## Anthropic-specific behavior
+
+  - **`max_tokens`** — Required by Anthropic's API (unlike OpenAI). Defaults to 4096
+    if not provided. Override via `max_tokens:` option in `chat/2`.
+  - **System messages** — Automatically extracted from the message list and placed
+    as the top-level `system` parameter. The caller does not need to handle this.
+  - **`provider_options`** — The `"anthropic-version"` key is extracted as a header.
+    All other keys are merged into the request body as additional API parameters.
   """
 
   @behaviour PhoenixAI.Provider
@@ -297,7 +306,7 @@ defmodule PhoenixAI.Providers.Anthropic do
       %{
         "model" => model,
         "messages" => format_messages(messages),
-        "max_tokens" => Keyword.get(opts, :max_tokens, 1024)
+        "max_tokens" => Keyword.get(opts, :max_tokens, 4096)
       }
       |> maybe_put("system", system)
       |> maybe_put("temperature", Keyword.get(opts, :temperature))
@@ -618,6 +627,34 @@ defmodule PhoenixAI.Providers.OpenRouterTest do
                %{"role" => "system", "content" => "You are helpful."},
                %{"role" => "user", "content" => "Hello"}
              ]
+    end
+
+    test "converts tool message with tool_call_id" do
+      messages = [
+        %PhoenixAI.Message{role: :tool, content: "sunny", tool_call_id: "call_123"}
+      ]
+
+      formatted = OpenRouter.format_messages(messages)
+
+      assert [%{"role" => "tool", "content" => "sunny", "tool_call_id" => "call_123"}] = formatted
+    end
+
+    test "preserves tool_calls on assistant messages" do
+      tc = %PhoenixAI.ToolCall{id: "call_1", name: "search", arguments: %{"q" => "elixir"}}
+
+      messages = [
+        %PhoenixAI.Message{role: :assistant, content: nil, tool_calls: [tc]}
+      ]
+
+      [formatted] = OpenRouter.format_messages(messages)
+
+      assert formatted["role"] == "assistant"
+
+      assert [%{"id" => "call_1", "type" => "function", "function" => func}] =
+               formatted["tool_calls"]
+
+      assert func["name"] == "search"
+      assert func["arguments"] == ~s({"q":"elixir"})
     end
   end
 
@@ -977,7 +1014,7 @@ Replace this test:
     end
 ```
 
-With this test:
+With these tests:
 
 ```elixir
     test "resolves :anthropic to a loaded provider module" do
@@ -991,7 +1028,51 @@ With this test:
     end
 ```
 
-- [ ] **Step 2: Run full test suite**
+- [ ] **Step 2: Add Mox-based dispatch tests for new providers**
+
+Add these tests to the same `describe "chat/2"` block in `test/phoenix_ai/ai_test.exs`:
+
+```elixir
+    test "delegates to Anthropic adapter via mock" do
+      expect(PhoenixAI.MockProvider, :chat, fn messages, opts ->
+        assert [%PhoenixAI.Message{role: :user, content: "Hi"}] = messages
+        assert opts[:model] == "claude-sonnet-4-5"
+        {:ok, %PhoenixAI.Response{content: "Bonjour!"}}
+      end)
+
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Hi"}],
+          provider: PhoenixAI.MockProvider,
+          model: "claude-sonnet-4-5",
+          api_key: "test-key"
+        )
+
+      assert {:ok, %PhoenixAI.Response{content: "Bonjour!"}} = result
+    end
+
+    test "delegates to OpenRouter adapter via mock" do
+      expect(PhoenixAI.MockProvider, :chat, fn messages, opts ->
+        assert [%PhoenixAI.Message{role: :user, content: "Hi"}] = messages
+        assert opts[:model] == "anthropic/claude-sonnet-4-5"
+        {:ok, %PhoenixAI.Response{content: "Hello via OpenRouter!"}}
+      end)
+
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Hi"}],
+          provider: PhoenixAI.MockProvider,
+          model: "anthropic/claude-sonnet-4-5",
+          api_key: "test-key"
+        )
+
+      assert {:ok, %PhoenixAI.Response{content: "Hello via OpenRouter!"}} = result
+    end
+```
+
+> **Note:** These tests use `PhoenixAI.MockProvider` (not `:anthropic`/`:openrouter` atoms) because `AI.provider_module/1` maps atoms to concrete modules. The Mox mock verifies the dispatch path (config resolution → adapter call) works correctly. The `Code.ensure_loaded?` tests in Step 1 verify the atom → module resolution.
+
+- [ ] **Step 3: Run full test suite**
 
 Run:
 ```bash
@@ -1000,7 +1081,7 @@ mix test
 
 Expected: All tests PASS across all test files.
 
-- [ ] **Step 3: Run formatter and credo**
+- [ ] **Step 4: Run formatter and credo**
 
 Run:
 ```bash
@@ -1009,7 +1090,7 @@ mix format && mix credo
 
 Expected: Clean.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add test/phoenix_ai/ai_test.exs

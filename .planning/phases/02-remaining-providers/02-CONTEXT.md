@@ -24,7 +24,7 @@ All three v1 providers (OpenAI, Anthropic, OpenRouter) are available through a u
 - **D-06:** Content format uses simple strings for Phase 2 (content blocks with types will be needed in Phase 3 for tool results).
 
 ### Default Models
-- **D-07:** OpenRouter has NO default model — caller must pass `model: "provider/model-name"`. Returns `{:error, :model_required}` if omitted.
+- **D-07:** OpenRouter has NO default model — caller must pass `model: "provider/model-name"`. Returns `{:error, %Error{message: "model is required for OpenRouter", provider: :openrouter}}` if omitted.
 - **D-08:** OpenAI default: `gpt-4o` (from Phase 1). Anthropic default: `claude-sonnet-4-5` (from Phase 1, no date suffix).
 
 ### Provider Dispatch
