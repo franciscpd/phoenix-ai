@@ -4,6 +4,12 @@ defmodule PhoenixAI.Schema.Validator do
 
   Validates decoded JSON data against an atom-keyed schema map.
   Supports required keys, basic types, enum values, and recursive nested objects.
+
+  ## Nullable semantics
+
+  `nil` values pass both required-key and type checks. A field `%{"name" => nil}`
+  satisfies `required: [:name]` and passes any type constraint. This is intentional
+  for v1 — LLM structured output modes rarely produce `null` for required fields.
   """
 
   @type error_details :: %{

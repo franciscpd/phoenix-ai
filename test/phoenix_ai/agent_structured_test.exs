@@ -3,7 +3,7 @@ defmodule PhoenixAI.AgentStructuredTest do
 
   import Mox
 
-  alias PhoenixAI.{Agent, Message, Response}
+  alias PhoenixAI.{Agent, Response}
 
   @schema %{
     type: :object,
