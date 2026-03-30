@@ -88,24 +88,24 @@ defmodule PhoenixAI.Stream do
           _ -> nil
         end
 
-      case chunk do
-        nil ->
-          acc
-
-        %StreamChunk{} = chunk ->
-          if chunk.delta, do: acc.callback.(chunk)
-
-          new_content =
-            if chunk.delta,
-              do: acc.content <> chunk.delta,
-              else: acc.content
-
-          new_usage = chunk.usage || acc.usage
-          new_finished = acc.finished or chunk.finish_reason != nil
-
-          %{acc | content: new_content, usage: new_usage, finished: new_finished}
-      end
+      apply_chunk(chunk, acc)
     end)
+  end
+
+  defp apply_chunk(nil, acc), do: acc
+
+  defp apply_chunk(%StreamChunk{} = chunk, acc) do
+    if chunk.delta, do: acc.callback.(chunk)
+
+    new_content =
+      if chunk.delta,
+        do: acc.content <> chunk.delta,
+        else: acc.content
+
+    new_usage = chunk.usage || acc.usage
+    new_finished = acc.finished or chunk.finish_reason != nil
+
+    %{acc | content: new_content, usage: new_usage, finished: new_finished}
   end
 
   @doc false

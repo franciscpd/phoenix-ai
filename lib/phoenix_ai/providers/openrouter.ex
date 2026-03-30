@@ -9,6 +9,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
   @behaviour PhoenixAI.Provider
 
   alias PhoenixAI.{Error, Message, Response, ToolCall}
+  alias PhoenixAI.Providers.OpenAI
 
   @default_base_url "https://openrouter.ai/api/v1"
 
@@ -119,7 +120,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
   end
 
   @impl PhoenixAI.Provider
-  def parse_chunk(event_data), do: PhoenixAI.Providers.OpenAI.parse_chunk(event_data)
+  def parse_chunk(event_data), do: OpenAI.parse_chunk(event_data)
 
   # Private helpers
 

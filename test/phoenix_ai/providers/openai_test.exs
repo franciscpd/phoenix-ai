@@ -90,7 +90,7 @@ defmodule PhoenixAI.Providers.OpenAITest do
 
   describe "format_tools/1" do
     test "wraps tool in OpenAI function calling format" do
-      [tool_def] = PhoenixAI.Providers.OpenAI.format_tools([PhoenixAI.TestTools.WeatherTool])
+      [tool_def] = OpenAI.format_tools([PhoenixAI.TestTools.WeatherTool])
 
       assert tool_def["type"] == "function"
       assert tool_def["function"]["name"] == "get_weather"
