@@ -128,6 +128,31 @@ defmodule PhoenixAI.Providers.Anthropic do
 
   # Private helpers
 
+  defp format_message(%Message{role: :tool, content: content, tool_call_id: tool_call_id}) do
+    %{
+      "role" => "user",
+      "content" => [
+        %{
+          "type" => "tool_result",
+          "tool_use_id" => tool_call_id,
+          "content" => content
+        }
+      ]
+    }
+  end
+
+  defp format_message(%Message{role: :assistant, tool_calls: tool_calls} = msg)
+       when is_list(tool_calls) and tool_calls != [] do
+    text_blocks = if msg.content, do: [%{"type" => "text", "text" => msg.content}], else: []
+
+    tool_blocks =
+      Enum.map(tool_calls, fn tc ->
+        %{"type" => "tool_use", "id" => tc.id, "name" => tc.name, "input" => tc.arguments}
+      end)
+
+    %{"role" => "assistant", "content" => text_blocks ++ tool_blocks}
+  end
+
   defp format_message(%Message{role: role, content: content}) do
     %{"role" => to_string(role), "content" => content}
   end

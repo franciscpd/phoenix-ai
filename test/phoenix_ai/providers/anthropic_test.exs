@@ -102,6 +102,67 @@ defmodule PhoenixAI.Providers.AnthropicTest do
     end
   end
 
+  describe "format_messages/1 tool calling" do
+    test "converts tool result to Anthropic tool_result content block" do
+      messages = [
+        %PhoenixAI.Message{role: :tool, content: "Sunny, 22°C", tool_call_id: "toolu_abc123"}
+      ]
+
+      [formatted] = Anthropic.format_messages(messages)
+
+      assert formatted["role"] == "user"
+
+      assert [
+               %{
+                 "type" => "tool_result",
+                 "tool_use_id" => "toolu_abc123",
+                 "content" => "Sunny, 22°C"
+               }
+             ] =
+               formatted["content"]
+    end
+
+    test "converts assistant message with tool_calls to content blocks" do
+      tc = %PhoenixAI.ToolCall{
+        id: "toolu_abc",
+        name: "get_weather",
+        arguments: %{"city" => "Lisbon"}
+      }
+
+      messages = [
+        %PhoenixAI.Message{role: :assistant, content: "Let me check.", tool_calls: [tc]}
+      ]
+
+      [formatted] = Anthropic.format_messages(messages)
+
+      assert formatted["role"] == "assistant"
+      assert [text_block, tool_block] = formatted["content"]
+      assert text_block == %{"type" => "text", "text" => "Let me check."}
+      assert tool_block["type"] == "tool_use"
+      assert tool_block["id"] == "toolu_abc"
+      assert tool_block["name"] == "get_weather"
+      assert tool_block["input"] == %{"city" => "Lisbon"}
+    end
+
+    test "assistant message with tool_calls but no text content omits text block" do
+      tc = %PhoenixAI.ToolCall{
+        id: "toolu_abc",
+        name: "get_weather",
+        arguments: %{"city" => "Lisbon"}
+      }
+
+      messages = [
+        %PhoenixAI.Message{role: :assistant, content: nil, tool_calls: [tc]}
+      ]
+
+      [formatted] = Anthropic.format_messages(messages)
+
+      assert formatted["role"] == "assistant"
+      assert [tool_block] = formatted["content"]
+      assert tool_block["type"] == "tool_use"
+    end
+  end
+
   describe "format_tools/1" do
     test "formats tool in Anthropic tool use format" do
       [tool_def] = Anthropic.format_tools([PhoenixAI.TestTools.WeatherTool])
