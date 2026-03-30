@@ -1,8 +1,8 @@
 defmodule PhoenixAI.Providers.OpenRouterTest do
   use ExUnit.Case, async: true
 
-  alias PhoenixAI.Providers.OpenRouter
   alias PhoenixAI.{Error, Response, ToolCall}
+  alias PhoenixAI.Providers.OpenRouter
 
   defp load_fixture(name) do
     Path.join([__DIR__, "../../support/fixtures/openrouter", name])
