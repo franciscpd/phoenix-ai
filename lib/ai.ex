@@ -15,7 +15,7 @@ defmodule AI do
   Options resolve in order: call-site > config.exs > env vars > provider defaults.
   """
 
-  alias PhoenixAI.Config
+  alias PhoenixAI.{Config, Schema}
 
   @known_providers [:openai, :anthropic, :openrouter]
 
@@ -37,7 +37,31 @@ defmodule AI do
   defp dispatch(provider_mod, messages, opts, provider_atom) do
     case Keyword.get(opts, :api_key) do
       nil -> {:error, {:missing_api_key, provider_atom}}
-      _key -> run_with_tools(provider_mod, messages, opts)
+      _key -> run_with_schema(provider_mod, messages, opts)
+    end
+  end
+
+  defp run_with_schema(provider_mod, messages, opts) do
+    schema_input = Keyword.get(opts, :schema)
+
+    if schema_input do
+      schema_json = Schema.resolve(schema_input)
+      atom_schema = Schema.schema_map(schema_input)
+
+      provider_opts =
+        opts
+        |> Keyword.drop([:schema])
+        |> Keyword.put(:schema_json, schema_json)
+
+      case run_with_tools(provider_mod, messages, provider_opts) do
+        {:ok, response} ->
+          Schema.validate_response(response, atom_schema, schema_input)
+
+        error ->
+          error
+      end
+    else
+      run_with_tools(provider_mod, messages, Keyword.drop(opts, [:schema]))
     end
   end
 
