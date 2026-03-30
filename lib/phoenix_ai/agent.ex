@@ -74,8 +74,8 @@ defmodule PhoenixAI.Agent do
   @spec prompt(GenServer.server(), String.t(), keyword()) ::
           {:ok, Response.t()} | {:error, term()}
   def prompt(server, text, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
-    GenServer.call(server, {:prompt, text, opts}, timeout)
+    {timeout, msg_opts} = Keyword.pop(opts, :timeout, @default_timeout)
+    GenServer.call(server, {:prompt, text, msg_opts}, timeout)
   end
 
   @doc "Returns the accumulated conversation messages."
@@ -84,8 +84,8 @@ defmodule PhoenixAI.Agent do
     GenServer.call(server, :get_messages)
   end
 
-  @doc "Clears conversation history, keeps configuration."
-  @spec reset(GenServer.server()) :: :ok
+  @doc "Clears conversation history, keeps configuration. Returns `{:error, :agent_busy}` if a prompt is in flight."
+  @spec reset(GenServer.server()) :: :ok | {:error, :agent_busy}
   def reset(server) do
     GenServer.call(server, :reset)
   end
@@ -94,6 +94,9 @@ defmodule PhoenixAI.Agent do
 
   @impl GenServer
   def init(opts) do
+    # Trap exits so Task.async crashes become messages instead of killing the Agent
+    Process.flag(:trap_exit, true)
+
     provider_atom = Keyword.fetch!(opts, :provider)
     provider_mod = AI.provider_module(provider_atom)
     system = Keyword.get(opts, :system)
@@ -102,7 +105,7 @@ defmodule PhoenixAI.Agent do
 
     provider_opts =
       opts
-      |> Keyword.drop([:provider, :system, :tools, :manage_history])
+      |> Keyword.drop([:provider, :system, :tools, :manage_history, :name])
       |> then(&Config.resolve(provider_atom, &1))
 
     state = %__MODULE__{
@@ -140,6 +143,10 @@ defmodule PhoenixAI.Agent do
 
   def handle_call(:get_messages, _from, state) do
     {:reply, state.messages, state}
+  end
+
+  def handle_call(:reset, _from, %{pending: {_, _}} = state) do
+    {:reply, {:error, :agent_busy}, state}
   end
 
   def handle_call(:reset, _from, state) do

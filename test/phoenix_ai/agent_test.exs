@@ -245,6 +245,24 @@ defmodule PhoenixAI.AgentTest do
     end
   end
 
+  describe "task crash" do
+    test "returns error when spawned task crashes" do
+      expect(PhoenixAI.MockProvider, :chat, fn _messages, _opts ->
+        # Exit the task process abnormally (not :kill, which is untrappable)
+        exit(:boom)
+      end)
+
+      {:ok, pid} = Agent.start_link(@base_opts)
+
+      assert {:error, {:agent_task_failed, :boom}} = Agent.prompt(pid, "Crash me")
+
+      # Agent should still be alive and accept new prompts
+      assert Process.alive?(pid)
+
+      GenServer.stop(pid)
+    end
+  end
+
   describe "isolation" do
     test "killing one agent does not affect another" do
       expect(PhoenixAI.MockProvider, :chat, fn _messages, _opts ->
