@@ -1,0 +1,9 @@
+event: message
+data: {"choices":[{"index":0,"delta":{"content":"Frag"},"finish_reason":null}]}
+
+event: message
+data: {"choices":[{"index":0,"delta":{"content":"mented"},"finish_reason":null}]}
+
+event: message
+data: [DONE]
+

@@ -139,6 +139,98 @@ defmodule PhoenixAI.StreamTest do
     end
   end
 
+  describe "SSE fixture integration" do
+    test "parses complete OpenAI SSE fixture" do
+      raw = File.read!("test/fixtures/sse/openai_simple.sse")
+
+      callback = fn chunk -> send(self(), {:chunk, chunk}) end
+      acc = %{
+        remainder: "",
+        provider_mod: FakeOpenAIProvider,
+        callback: callback,
+        content: "",
+        usage: nil,
+        finished: false
+      }
+
+      result = Stream.process_sse_events(raw, acc)
+
+      assert result.content == "Hello world"
+      assert result.finished == true
+      assert_received {:chunk, %StreamChunk{delta: "Hello"}}
+      assert_received {:chunk, %StreamChunk{delta: " world"}}
+    end
+
+    test "handles OpenAI SSE fragmented at arbitrary byte positions" do
+      raw = File.read!("test/fixtures/sse/openai_fragmented.sse")
+
+      for split_pos <- [10, 30, 50, div(byte_size(raw), 2)] do
+        callback = fn chunk -> send(self(), {:chunk, chunk}) end
+
+        acc = %{
+          remainder: "",
+          provider_mod: FakeOpenAIProvider,
+          callback: callback,
+          content: "",
+          usage: nil,
+          finished: false
+        }
+
+        {frag1, frag2} = String.split_at(raw, split_pos)
+
+        acc = Stream.process_sse_events(frag1, acc)
+        result = Stream.process_sse_events(frag2, acc)
+
+        assert result.content == "Fragmented",
+               "Failed at split_pos=#{split_pos}: got #{inspect(result.content)}"
+
+        assert result.finished == true
+      end
+    end
+
+    test "parses complete Anthropic SSE fixture" do
+      raw = File.read!("test/fixtures/sse/anthropic_simple.sse")
+
+      defmodule FakeAnthropicProvider do
+        alias PhoenixAI.StreamChunk
+
+        def parse_chunk(%{event: "content_block_delta", data: data}) do
+          json = Jason.decode!(data)
+          %StreamChunk{delta: get_in(json, ["delta", "text"])}
+        end
+
+        def parse_chunk(%{event: "message_delta", data: data}) do
+          json = Jason.decode!(data)
+          %StreamChunk{
+            finish_reason: get_in(json, ["delta", "stop_reason"]),
+            usage: Map.get(json, "usage")
+          }
+        end
+
+        def parse_chunk(%{event: "message_stop", data: _}), do: %StreamChunk{finish_reason: "stop"}
+        def parse_chunk(_), do: nil
+      end
+
+      callback = fn chunk -> send(self(), {:chunk, chunk}) end
+      acc = %{
+        remainder: "",
+        provider_mod: FakeAnthropicProvider,
+        callback: callback,
+        content: "",
+        usage: nil,
+        finished: false
+      }
+
+      result = Stream.process_sse_events(raw, acc)
+
+      assert result.content == "Hello world"
+      assert result.finished == true
+      assert result.usage == %{"output_tokens" => 2}
+      assert_received {:chunk, %StreamChunk{delta: "Hello"}}
+      assert_received {:chunk, %StreamChunk{delta: " world"}}
+    end
+  end
+
   describe "build_response/1" do
     test "builds Response struct from accumulated state" do
       acc = %{content: "Hello world", usage: %{"total_tokens" => 10}, finished: true}
