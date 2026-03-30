@@ -1,4 +1,5 @@
 defmodule PhoenixAI.TestTools.WeatherTool do
+  @moduledoc false
   @behaviour PhoenixAI.Tool
 
   @impl true

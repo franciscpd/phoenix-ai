@@ -54,6 +54,20 @@ defmodule PhoenixAI.Providers.OpenRouter do
 
   def validate_model(_model), do: :ok
 
+  @impl PhoenixAI.Provider
+  def format_tools(tools) do
+    Enum.map(tools, fn mod ->
+      %{
+        "type" => "function",
+        "function" => %{
+          "name" => PhoenixAI.Tool.name(mod),
+          "description" => PhoenixAI.Tool.description(mod),
+          "parameters" => PhoenixAI.Tool.to_json_schema(mod)
+        }
+      }
+    end)
+  end
+
   @doc """
   Converts a list of `PhoenixAI.Message` structs into OpenAI-compatible message format.
   """
@@ -75,6 +89,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
         "model" => model,
         "messages" => format_messages(messages)
       }
+      |> maybe_put("tools", Keyword.get(opts, :tools_json))
       |> maybe_put("temperature", Keyword.get(opts, :temperature))
       |> maybe_put("max_tokens", Keyword.get(opts, :max_tokens))
       |> Map.merge(Map.drop(provider_options, ["http_referer", "x_title"]))

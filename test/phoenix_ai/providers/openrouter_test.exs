@@ -100,4 +100,17 @@ defmodule PhoenixAI.Providers.OpenRouterTest do
       assert :ok = OpenRouter.validate_model("anthropic/claude-sonnet-4-5")
     end
   end
+
+  describe "format_tools/1" do
+    test "wraps tool in OpenAI-compatible function calling format" do
+      [tool_def] = OpenRouter.format_tools([PhoenixAI.TestTools.WeatherTool])
+
+      assert tool_def["type"] == "function"
+      assert tool_def["function"]["name"] == "get_weather"
+      assert tool_def["function"]["description"] == "Get current weather for a city"
+      assert tool_def["function"]["parameters"]["type"] == "object"
+      assert tool_def["function"]["parameters"]["properties"]["city"]["type"] == "string"
+      assert tool_def["function"]["parameters"]["required"] == ["city"]
+    end
+  end
 end

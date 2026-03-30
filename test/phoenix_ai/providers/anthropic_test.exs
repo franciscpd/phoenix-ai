@@ -101,4 +101,17 @@ defmodule PhoenixAI.Providers.AnthropicTest do
       assert Anthropic.extract_system(messages) == nil
     end
   end
+
+  describe "format_tools/1" do
+    test "formats tool in Anthropic tool use format" do
+      [tool_def] = Anthropic.format_tools([PhoenixAI.TestTools.WeatherTool])
+
+      assert tool_def["name"] == "get_weather"
+      assert tool_def["description"] == "Get current weather for a city"
+      assert tool_def["input_schema"]["type"] == "object"
+      assert tool_def["input_schema"]["properties"]["city"]["type"] == "string"
+      assert tool_def["input_schema"]["required"] == ["city"]
+      refute Map.has_key?(tool_def, "type")
+    end
+  end
 end
