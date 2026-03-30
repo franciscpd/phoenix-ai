@@ -29,18 +29,13 @@ defmodule PhoenixAI.Providers.Anthropic do
     base_url = Keyword.get(opts, :base_url, @default_base_url)
     provider_options = Keyword.get(opts, :provider_options, %{})
     api_version = Map.get(provider_options, "anthropic-version", @default_api_version)
+    max_tokens = Keyword.get(opts, :max_tokens, 4096)
 
     system = extract_system(messages)
 
     body =
-      %{
-        "model" => model,
-        "messages" => format_messages(messages),
-        "max_tokens" => Keyword.get(opts, :max_tokens, 4096)
-      }
+      build_body(model, format_messages(messages), max_tokens, opts)
       |> maybe_put("system", system)
-      |> maybe_put("tools", Keyword.get(opts, :tools_json))
-      |> maybe_put("temperature", Keyword.get(opts, :temperature))
       |> Map.merge(Map.drop(provider_options, ["anthropic-version"]))
 
     case Req.post("#{base_url}/messages",
@@ -68,6 +63,51 @@ defmodule PhoenixAI.Providers.Anthropic do
     end
   end
 
+  @doc false
+  @spec build_body(String.t(), [map()], non_neg_integer(), keyword()) :: map()
+  def build_body(model, formatted_messages, max_tokens, opts) do
+    schema_json = Keyword.get(opts, :schema_json)
+    tools_json = Keyword.get(opts, :tools_json)
+
+    %{
+      "model" => model,
+      "messages" => formatted_messages,
+      "max_tokens" => max_tokens
+    }
+    |> maybe_put("temperature", Keyword.get(opts, :temperature))
+    |> inject_schema_and_tools(schema_json, tools_json)
+  end
+
+  defp inject_schema_and_tools(body, nil, nil), do: body
+
+  defp inject_schema_and_tools(body, nil, tools_json) do
+    Map.put(body, "tools", tools_json)
+  end
+
+  defp inject_schema_and_tools(body, schema_json, nil) do
+    synthetic = %{
+      "name" => "structured_output",
+      "description" => "Return structured response matching the schema",
+      "input_schema" => schema_json
+    }
+
+    body
+    |> Map.put("tools", [synthetic])
+    |> Map.put("tool_choice", %{"type" => "any"})
+  end
+
+  defp inject_schema_and_tools(body, schema_json, tools_json) do
+    synthetic = %{
+      "name" => "structured_output",
+      "description" => "Return structured response matching the schema",
+      "input_schema" => schema_json
+    }
+
+    body
+    |> Map.put("tools", tools_json ++ [synthetic])
+    |> Map.put("tool_choice", %{"type" => "auto"})
+  end
+
   @impl PhoenixAI.Provider
   def parse_response(body) do
     content_blocks = Map.get(body, "content", [])
@@ -75,17 +115,36 @@ defmodule PhoenixAI.Providers.Anthropic do
     model = Map.get(body, "model")
     usage = Map.get(body, "usage", %{})
 
-    text_content = extract_text_content(content_blocks)
-    tool_calls = extract_tool_calls(content_blocks)
+    {structured_input, remaining_blocks} = extract_structured_output(content_blocks)
+
+    text_content = extract_text_content(remaining_blocks)
+    tool_calls = extract_tool_calls(remaining_blocks)
+
+    final_content =
+      if structured_input do
+        Jason.encode!(structured_input)
+      else
+        text_content
+      end
 
     %Response{
-      content: text_content,
+      content: final_content,
       finish_reason: stop_reason,
       model: model,
       usage: usage,
       tool_calls: tool_calls,
       provider_response: body
     }
+  end
+
+  defp extract_structured_output(content_blocks) do
+    case Enum.split_with(content_blocks, fn
+           %{"type" => "tool_use", "name" => "structured_output"} -> true
+           _ -> false
+         end) do
+      {[%{"input" => input} | _], remaining} -> {input, remaining}
+      {[], blocks} -> {nil, blocks}
+    end
   end
 
   @impl PhoenixAI.Provider
