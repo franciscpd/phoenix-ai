@@ -25,12 +25,16 @@ defmodule PhoenixAI.ToolLoop do
   def run(provider_mod, messages, tools, opts) do
     formatted_tools = provider_mod.format_tools(tools)
     max_iterations = Keyword.get(opts, :max_iterations, @default_max_iterations)
-    opts_with_tools = Keyword.put(opts, :tools_json, formatted_tools)
 
-    do_loop(provider_mod, messages, tools, opts_with_tools, max_iterations, 0)
+    provider_opts =
+      opts
+      |> Keyword.drop([:tools, :max_iterations])
+      |> Keyword.put(:tools_json, formatted_tools)
+
+    do_loop(provider_mod, messages, tools, provider_opts, max_iterations, 0)
   end
 
-  defp do_loop(_provider_mod, _messages, _tools, _opts, max, iteration) when iteration > max do
+  defp do_loop(_provider_mod, _messages, _tools, _opts, max, iteration) when iteration >= max do
     {:error, :max_iterations_reached}
   end
 

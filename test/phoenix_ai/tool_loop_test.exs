@@ -46,12 +46,62 @@ defmodule PhoenixAI.ToolLoopTest do
                ToolLoop.run(PhoenixAI.MockProvider, messages, @tools, @base_opts)
     end
 
+    test "multi iteration: two rounds of tool calls then final response" do
+      PhoenixAI.MockProvider
+      |> expect(:format_tools, fn _tools ->
+        [%{"type" => "function", "function" => %{"name" => "get_weather"}}]
+      end)
+      # Round 1: provider requests weather for Lisbon
+      |> expect(:chat, fn _messages, _opts ->
+        {:ok,
+         %Response{
+           content: nil,
+           tool_calls: [
+             %ToolCall{id: "call_1", name: "get_weather", arguments: %{"city" => "Lisbon"}}
+           ],
+           finish_reason: "tool_calls"
+         }}
+      end)
+      # Round 2: provider requests weather for Porto
+      |> expect(:chat, fn messages, _opts ->
+        assert Enum.any?(messages, &(&1.role == :tool && &1.tool_call_id == "call_1"))
+
+        {:ok,
+         %Response{
+           content: nil,
+           tool_calls: [
+             %ToolCall{id: "call_2", name: "get_weather", arguments: %{"city" => "Porto"}}
+           ],
+           finish_reason: "tool_calls"
+         }}
+      end)
+      # Round 3: final response
+      |> expect(:chat, fn messages, _opts ->
+        tool_msgs = Enum.filter(messages, &(&1.role == :tool))
+        assert length(tool_msgs) == 2
+        assert Enum.any?(tool_msgs, &(&1.content == "Sunny, 22°C in Lisbon"))
+        assert Enum.any?(tool_msgs, &(&1.content == "Sunny, 22°C in Porto"))
+
+        {:ok,
+         %Response{
+           content: "Lisbon is sunny, Porto is sunny!",
+           tool_calls: [],
+           finish_reason: "stop"
+         }}
+      end)
+
+      messages = [%Message{role: :user, content: "Weather in Lisbon and Porto?"}]
+
+      assert {:ok, %Response{content: "Lisbon is sunny, Porto is sunny!"}} =
+               ToolLoop.run(PhoenixAI.MockProvider, messages, @tools, @base_opts)
+    end
+
     test "max iterations reached" do
       PhoenixAI.MockProvider
       |> expect(:format_tools, fn _tools ->
         [%{"type" => "function", "function" => %{"name" => "get_weather"}}]
       end)
-      |> expect(:chat, 3, fn _messages, _opts ->
+      |> expect(:chat, 2, fn _messages, _opts ->
         {:ok,
          %Response{
            content: nil,
