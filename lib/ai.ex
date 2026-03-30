@@ -34,6 +34,42 @@ defmodule AI do
     end
   end
 
+  @spec stream([PhoenixAI.Message.t()], keyword()) ::
+          {:ok, PhoenixAI.Response.t()} | {:error, term()}
+  def stream(messages, opts \\ []) do
+    provider_atom = opts[:provider] || default_provider()
+
+    case resolve_provider(provider_atom) do
+      {:ok, provider_mod} ->
+        merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
+        dispatch_stream(provider_mod, messages, merged_opts, provider_atom)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc false
+  def build_callback(opts) do
+    cond do
+      fun = Keyword.get(opts, :on_chunk) -> fun
+      pid = Keyword.get(opts, :to) -> fn chunk -> send(pid, {:phoenix_ai, {:chunk, chunk}}) end
+      true -> fn chunk -> send(self(), {:phoenix_ai, {:chunk, chunk}}) end
+    end
+  end
+
+  defp dispatch_stream(provider_mod, messages, opts, provider_atom) do
+    case Keyword.get(opts, :api_key) do
+      nil ->
+        {:error, {:missing_api_key, provider_atom}}
+
+      _key ->
+        callback = build_callback(opts)
+        stream_opts = Keyword.drop(opts, [:on_chunk, :to, :schema])
+        PhoenixAI.Stream.run(provider_mod, messages, callback, stream_opts)
+    end
+  end
+
   defp dispatch(provider_mod, messages, opts, provider_atom) do
     case Keyword.get(opts, :api_key) do
       nil -> {:error, {:missing_api_key, provider_atom}}
