@@ -120,6 +120,8 @@ end
 
 **Interface:** `parse_chunk/1` receives `%{event: String.t() | nil, data: String.t()}` and returns `%StreamChunk{}` or `nil` (ignored event).
 
+**Request building:** Each adapter also exposes `stream_url/1` and `stream_headers/1` (or reuses existing URL/headers logic). `PhoenixAI.Stream.run/4` calls these to construct the `Finch.build(:post, url, headers, body)` request. This keeps the central module provider-agnostic — it never hardcodes URLs or auth headers.
+
 **OpenAI:**
 
 ```elixir
@@ -151,7 +153,7 @@ def parse_chunk(%{event: "message_delta", data: data}) do
   json = Jason.decode!(data)
   %StreamChunk{finish_reason: json["delta"]["stop_reason"]}
 end
-def parse_chunk(%{event: "message_stop"}), do: %StreamChunk{finish_reason: "stop"}
+def parse_chunk(%{event: "message_stop", data: _}), do: %StreamChunk{finish_reason: "stop"}
 def parse_chunk(_), do: nil  # ping, message_start, content_block_start, etc.
 
 def build_stream_body(model, formatted_messages, opts) do
