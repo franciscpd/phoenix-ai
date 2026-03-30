@@ -51,5 +51,16 @@ defmodule PhoenixAI.ResponseTest do
       assert resp.usage.input_tokens == 10
       assert resp.usage.output_tokens == 5
     end
+
+    test "includes parsed field defaulting to nil" do
+      response = %Response{}
+      assert Map.has_key?(response, :parsed)
+      assert response.parsed == nil
+    end
+
+    test "parsed can hold a map" do
+      response = %Response{parsed: %{"name" => "Alice"}}
+      assert response.parsed == %{"name" => "Alice"}
+    end
   end
 end

@@ -3,6 +3,7 @@ defmodule PhoenixAI.Response do
 
   @type t :: %__MODULE__{
           content: String.t() | nil,
+          parsed: map() | nil,
           tool_calls: [PhoenixAI.ToolCall.t()],
           usage: map(),
           finish_reason: String.t() | nil,
@@ -10,5 +11,5 @@ defmodule PhoenixAI.Response do
           provider_response: map()
         }
 
-  defstruct [:content, :finish_reason, :model, tool_calls: [], usage: %{}, provider_response: %{}]
+  defstruct [:content, :parsed, :finish_reason, :model, tool_calls: [], usage: %{}, provider_response: %{}]
 end
