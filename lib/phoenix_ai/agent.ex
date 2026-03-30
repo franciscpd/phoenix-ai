@@ -34,7 +34,7 @@ defmodule PhoenixAI.Agent do
 
   use GenServer
 
-  alias PhoenixAI.{Config, Message, Response, ToolLoop}
+  alias PhoenixAI.{Config, Message, Response, Schema, ToolLoop}
 
   @default_timeout 60_000
 
@@ -45,6 +45,7 @@ defmodule PhoenixAI.Agent do
     :manage_history,
     :pending,
     :pending_user_msg,
+    :schema,
     tools: [],
     messages: [],
     opts: []
@@ -102,11 +103,20 @@ defmodule PhoenixAI.Agent do
     system = Keyword.get(opts, :system)
     tools = Keyword.get(opts, :tools, [])
     manage_history = Keyword.get(opts, :manage_history, true)
+    schema = Keyword.get(opts, :schema)
 
     provider_opts =
       opts
-      |> Keyword.drop([:provider, :system, :tools, :manage_history, :name])
+      |> Keyword.drop([:provider, :system, :tools, :manage_history, :name, :schema])
       |> then(&Config.resolve(provider_atom, &1))
+
+    provider_opts =
+      if schema do
+        schema_json = Schema.resolve(schema)
+        Keyword.put(provider_opts, :schema_json, schema_json)
+      else
+        provider_opts
+      end
 
     state = %__MODULE__{
       provider_mod: provider_mod,
@@ -114,6 +124,7 @@ defmodule PhoenixAI.Agent do
       system: system,
       tools: tools,
       manage_history: manage_history,
+      schema: schema,
       opts: provider_opts
     }
 
@@ -157,6 +168,8 @@ defmodule PhoenixAI.Agent do
   def handle_info({ref, result}, %{pending: {from, ref}} = state) do
     Process.demonitor(ref, [:flush])
 
+    result = maybe_validate_schema(result, state.schema)
+
     new_messages =
       case {state.manage_history, result} do
         {true, {:ok, %Response{} = response}} ->
@@ -186,6 +199,13 @@ defmodule PhoenixAI.Agent do
   end
 
   # --- Private Helpers ---
+
+  defp maybe_validate_schema({:ok, %Response{} = response}, schema) when not is_nil(schema) do
+    atom_schema = Schema.schema_map(schema)
+    Schema.validate_response(response, atom_schema, schema)
+  end
+
+  defp maybe_validate_schema(result, _schema), do: result
 
   defp build_messages(state, user_msg, msg_opts) do
     system_msgs =
