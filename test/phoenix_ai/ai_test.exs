@@ -109,5 +109,43 @@ defmodule AITest do
 
       assert {:error, {:missing_api_key, :openai}} = result
     end
+
+    test "routes to ToolLoop when tools option is present" do
+      PhoenixAI.MockProvider
+      |> expect(:format_tools, fn tools ->
+        assert [PhoenixAI.TestTools.WeatherTool] = tools
+        [%{"type" => "function", "function" => %{"name" => "get_weather"}}]
+      end)
+      |> expect(:chat, fn _messages, opts ->
+        assert opts[:tools_json] != nil
+        {:ok, %PhoenixAI.Response{content: "It's sunny!", tool_calls: [], finish_reason: "stop"}}
+      end)
+
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Weather?"}],
+          provider: PhoenixAI.MockProvider,
+          api_key: "test-key",
+          tools: [PhoenixAI.TestTools.WeatherTool]
+        )
+
+      assert {:ok, %PhoenixAI.Response{content: "It's sunny!"}} = result
+    end
+
+    test "without tools option, does not invoke ToolLoop" do
+      expect(PhoenixAI.MockProvider, :chat, fn _messages, opts ->
+        refute Keyword.has_key?(opts, :tools_json)
+        {:ok, %PhoenixAI.Response{content: "Hello!", tool_calls: []}}
+      end)
+
+      result =
+        AI.chat(
+          [%PhoenixAI.Message{role: :user, content: "Hi"}],
+          provider: PhoenixAI.MockProvider,
+          api_key: "test-key"
+        )
+
+      assert {:ok, %PhoenixAI.Response{content: "Hello!"}} = result
+    end
   end
 end

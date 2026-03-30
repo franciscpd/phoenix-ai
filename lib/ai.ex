@@ -27,14 +27,27 @@ defmodule AI do
     case resolve_provider(provider_atom) do
       {:ok, provider_mod} ->
         merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
-
-        case merged_opts[:api_key] do
-          nil -> {:error, {:missing_api_key, provider_atom}}
-          _key -> provider_mod.chat(messages, merged_opts)
-        end
+        dispatch(provider_mod, messages, merged_opts, provider_atom)
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  defp dispatch(provider_mod, messages, opts, provider_atom) do
+    case Keyword.get(opts, :api_key) do
+      nil -> {:error, {:missing_api_key, provider_atom}}
+      _key -> run_with_tools(provider_mod, messages, opts)
+    end
+  end
+
+  defp run_with_tools(provider_mod, messages, opts) do
+    tools = Keyword.get(opts, :tools)
+
+    if tools && tools != [] do
+      PhoenixAI.ToolLoop.run(provider_mod, messages, tools, opts)
+    else
+      provider_mod.chat(messages, opts)
     end
   end
 
