@@ -47,6 +47,7 @@ defmodule PhoenixAI.MixProject do
       {:nimble_options, "~> 1.1"},
       {:telemetry, "~> 1.3"},
       {:finch, "~> 0.19"},
+      {:server_sent_events, "~> 0.2"},
       {:mox, "~> 1.2", only: :test},
       {:excoveralls, "~> 0.18", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
