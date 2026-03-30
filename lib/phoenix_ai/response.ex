@@ -11,5 +11,13 @@ defmodule PhoenixAI.Response do
           provider_response: map()
         }
 
-  defstruct [:content, :parsed, :finish_reason, :model, tool_calls: [], usage: %{}, provider_response: %{}]
+  defstruct [
+    :content,
+    :parsed,
+    :finish_reason,
+    :model,
+    tool_calls: [],
+    usage: %{},
+    provider_response: %{}
+  ]
 end

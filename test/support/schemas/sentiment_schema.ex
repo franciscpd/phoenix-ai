@@ -1,4 +1,5 @@
 defmodule PhoenixAI.TestSchemas.SentimentSchema do
+  @moduledoc false
   @behaviour PhoenixAI.Schema
 
   @impl true

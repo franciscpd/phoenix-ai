@@ -110,7 +110,9 @@ defmodule PhoenixAI.Schema.ValidatorTest do
       }
 
       assert {:error, details} = Validator.validate(%{"color" => "yellow"}, schema)
-      assert [%{key: "color", expected: ["red", "green", "blue"], got: "yellow"}] = details.enum_errors
+
+      assert [%{key: "color", expected: ["red", "green", "blue"], got: "yellow"}] =
+               details.enum_errors
     end
   end
 

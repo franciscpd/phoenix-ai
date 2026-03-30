@@ -55,65 +55,69 @@ defmodule PhoenixAI.Schema.Validator do
   # Iterates over schema properties and checks types, enums, and nested objects.
   # Returns a 3-tuple: {type_errors, enum_errors, nested_missing_keys}
   defp check_properties(data, properties, prefix) do
-    Enum.reduce(properties, {[], [], []}, fn {prop_key, prop_schema}, {te, ee, nm} ->
+    Enum.reduce(properties, {[], [], []}, fn {prop_key, prop_schema}, acc ->
       str_key = to_string(prop_key)
       full_key = prefix_key(prefix, str_key)
 
       case Map.fetch(data, str_key) do
-        :error ->
-          # Key absent — skip (required check is handled separately)
-          {te, ee, nm}
-
-        {:ok, nil} ->
-          # nil is nullable — skip all type/enum checks
-          {te, ee, nm}
-
-        {:ok, value} ->
-          expected_type = Map.get(prop_schema, :type)
-          enum_values = Map.get(prop_schema, :enum)
-
-          # Type check
-          {te2, recurse_into_nested} =
-            if expected_type != nil and not type_matches?(value, expected_type) do
-              error = %{key: full_key, expected: to_string(expected_type), got: type_of(value), value: value}
-              {[error | te], false}
-            else
-              {te, expected_type == :object and is_map(value)}
-            end
-
-          # Enum check (only when value passed type check or no type constraint)
-          ee2 =
-            if enum_values != nil and te2 == te do
-              str_enum = Enum.map(enum_values, &to_string/1)
-
-              if to_string(value) in str_enum do
-                ee
-              else
-                error = %{key: full_key, expected: str_enum, got: to_string(value)}
-                [error | ee]
-              end
-            else
-              ee
-            end
-
-          # Recurse into nested objects (single call, extract all three error lists)
-          {nested_te, nested_ee, nested_nm} =
-            if recurse_into_nested do
-              case validate_object(value, prop_schema, full_key) do
-                :ok ->
-                  {[], [], []}
-
-                {:error, nested_details} ->
-                  {nested_details.type_errors, nested_details.enum_errors, nested_details.missing_keys}
-              end
-            else
-              {[], [], []}
-            end
-
-          {te2 ++ nested_te, ee2 ++ nested_ee, nm ++ nested_nm}
+        :error -> acc
+        {:ok, nil} -> acc
+        {:ok, value} -> check_property_value(value, prop_schema, full_key, acc)
       end
     end)
   end
+
+  defp check_property_value(value, prop_schema, full_key, {te, ee, nm}) do
+    expected_type = Map.get(prop_schema, :type)
+
+    {te, type_ok} = check_type(value, expected_type, full_key, te)
+    ee = check_enum(value, prop_schema, full_key, type_ok, ee)
+    {nested_te, nested_ee, nested_nm} = check_nested(value, prop_schema, full_key, type_ok)
+
+    {te ++ nested_te, ee ++ nested_ee, nm ++ nested_nm}
+  end
+
+  defp check_type(_value, nil, _key, acc), do: {acc, true}
+
+  defp check_type(value, expected_type, key, acc) do
+    if type_matches?(value, expected_type) do
+      {acc, true}
+    else
+      error = %{key: key, expected: to_string(expected_type), got: type_of(value), value: value}
+      {[error | acc], false}
+    end
+  end
+
+  defp check_enum(_value, _prop_schema, _key, false, acc), do: acc
+
+  defp check_enum(value, prop_schema, key, true, acc) do
+    case Map.get(prop_schema, :enum) do
+      nil ->
+        acc
+
+      enum_values ->
+        str_enum = Enum.map(enum_values, &to_string/1)
+
+        if to_string(value) in str_enum do
+          acc
+        else
+          [%{key: key, expected: str_enum, got: to_string(value)} | acc]
+        end
+    end
+  end
+
+  defp check_nested(value, prop_schema, full_key, true) when is_map(value) do
+    if Map.get(prop_schema, :type) == :object do
+      case validate_object(value, prop_schema, full_key) do
+        :ok -> {[], [], []}
+        {:error, d} -> {d.type_errors, d.enum_errors, d.missing_keys}
+      end
+    else
+      {[], [], []}
+    end
+  end
+
+  defp check_nested(_value, _prop_schema, _full_key, _type_ok), do: {[], [], []}
 
   # Checks whether a value matches a given schema type atom.
   defp type_matches?(value, :string), do: is_binary(value)

@@ -79,7 +79,12 @@ defmodule PhoenixAI.Providers.AnthropicStructuredTest do
     test "does not interfere with real tool_use blocks" do
       body = %{
         "content" => [
-          %{"type" => "tool_use", "id" => "toolu_01", "name" => "get_weather", "input" => %{"city" => "Lisbon"}}
+          %{
+            "type" => "tool_use",
+            "id" => "toolu_01",
+            "name" => "get_weather",
+            "input" => %{"city" => "Lisbon"}
+          }
         ],
         "stop_reason" => "tool_use",
         "model" => "claude-sonnet-4-5",
@@ -96,7 +101,12 @@ defmodule PhoenixAI.Providers.AnthropicStructuredTest do
       body = %{
         "content" => [
           %{"type" => "text", "text" => "Here's the data:"},
-          %{"type" => "tool_use", "id" => "toolu_01", "name" => "structured_output", "input" => %{"result" => "ok"}}
+          %{
+            "type" => "tool_use",
+            "id" => "toolu_01",
+            "name" => "structured_output",
+            "input" => %{"result" => "ok"}
+          }
         ],
         "stop_reason" => "tool_use",
         "model" => "claude-sonnet-4-5",
