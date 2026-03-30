@@ -7,7 +7,7 @@ defmodule PhoenixAI.Providers.OpenAI do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Error, Message, Response, ToolCall}
+  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall}
 
   @default_base_url "https://api.openai.com/v1"
 
@@ -100,6 +100,47 @@ defmodule PhoenixAI.Providers.OpenAI do
     |> maybe_put("temperature", Keyword.get(opts, :temperature))
     |> maybe_put("max_tokens", Keyword.get(opts, :max_tokens))
     |> maybe_put_schema(Keyword.get(opts, :schema_json))
+  end
+
+  @doc false
+  @spec build_stream_body(String.t(), [map()], keyword()) :: map()
+  def build_stream_body(model, formatted_messages, opts) do
+    build_body(model, formatted_messages, opts)
+    |> Map.put("stream", true)
+    |> Map.put("stream_options", %{"include_usage" => true})
+  end
+
+  @doc false
+  @spec stream_url(keyword()) :: String.t()
+  def stream_url(opts) do
+    base_url = Keyword.get(opts, :base_url, @default_base_url)
+    "#{base_url}/chat/completions"
+  end
+
+  @doc false
+  @spec stream_headers(keyword()) :: [{String.t(), String.t()}]
+  def stream_headers(opts) do
+    api_key = Keyword.fetch!(opts, :api_key)
+
+    [
+      {"authorization", "Bearer #{api_key}"},
+      {"content-type", "application/json"}
+    ]
+  end
+
+  @impl PhoenixAI.Provider
+  def parse_chunk(%{data: "[DONE]"}), do: %StreamChunk{finish_reason: "stop"}
+
+  def parse_chunk(%{data: data}) do
+    json = Jason.decode!(data)
+    choice = json |> Map.get("choices", []) |> List.first(%{})
+    delta = Map.get(choice, "delta", %{})
+
+    %StreamChunk{
+      delta: Map.get(delta, "content"),
+      finish_reason: Map.get(choice, "finish_reason"),
+      usage: Map.get(json, "usage")
+    }
   end
 
   # Private helpers
