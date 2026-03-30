@@ -19,13 +19,7 @@ defmodule PhoenixAI.Providers.OpenAI do
     provider_options = Keyword.get(opts, :provider_options, %{})
 
     body =
-      %{
-        "model" => model,
-        "messages" => format_messages(messages)
-      }
-      |> maybe_put("tools", Keyword.get(opts, :tools_json))
-      |> maybe_put("temperature", Keyword.get(opts, :temperature))
-      |> maybe_put("max_tokens", Keyword.get(opts, :max_tokens))
+      build_body(model, format_messages(messages), opts)
       |> Map.merge(provider_options)
 
     case Req.post("#{base_url}/chat/completions",
@@ -95,7 +89,33 @@ defmodule PhoenixAI.Providers.OpenAI do
     Enum.map(messages, &format_message/1)
   end
 
+  @doc false
+  @spec build_body(String.t(), [map()], keyword()) :: map()
+  def build_body(model, formatted_messages, opts) do
+    %{
+      "model" => model,
+      "messages" => formatted_messages
+    }
+    |> maybe_put("tools", Keyword.get(opts, :tools_json))
+    |> maybe_put("temperature", Keyword.get(opts, :temperature))
+    |> maybe_put("max_tokens", Keyword.get(opts, :max_tokens))
+    |> maybe_put_schema(Keyword.get(opts, :schema_json))
+  end
+
   # Private helpers
+
+  defp maybe_put_schema(body, nil), do: body
+
+  defp maybe_put_schema(body, schema_json) do
+    Map.put(body, "response_format", %{
+      "type" => "json_schema",
+      "json_schema" => %{
+        "name" => "structured_output",
+        "strict" => true,
+        "schema" => schema_json
+      }
+    })
+  end
 
   defp format_message(%Message{role: :tool, content: content, tool_call_id: tool_call_id}) do
     %{"role" => "tool", "content" => content, "tool_call_id" => tool_call_id}
