@@ -4,8 +4,9 @@ defmodule PhoenixAI.StreamChunk do
   @type t :: %__MODULE__{
           delta: String.t() | nil,
           tool_call_delta: map() | nil,
-          finish_reason: String.t() | nil
+          finish_reason: String.t() | nil,
+          usage: map() | nil
         }
 
-  defstruct [:delta, :tool_call_delta, :finish_reason]
+  defstruct [:delta, :tool_call_delta, :finish_reason, :usage]
 end

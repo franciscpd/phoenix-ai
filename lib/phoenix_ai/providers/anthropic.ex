@@ -17,7 +17,7 @@ defmodule PhoenixAI.Providers.Anthropic do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Error, Message, Response, ToolCall}
+  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall}
 
   @default_base_url "https://api.anthropic.com/v1"
   @default_api_version "2023-06-01"
@@ -77,6 +77,52 @@ defmodule PhoenixAI.Providers.Anthropic do
     |> maybe_put("temperature", Keyword.get(opts, :temperature))
     |> inject_schema_and_tools(schema_json, tools_json)
   end
+
+  @doc false
+  @spec build_stream_body(String.t(), [map()], non_neg_integer(), keyword()) :: map()
+  def build_stream_body(model, formatted_messages, max_tokens, opts) do
+    build_body(model, formatted_messages, max_tokens, opts)
+    |> Map.put("stream", true)
+  end
+
+  @doc false
+  @spec stream_url(keyword()) :: String.t()
+  def stream_url(opts) do
+    base_url = Keyword.get(opts, :base_url, @default_base_url)
+    "#{base_url}/messages"
+  end
+
+  @doc false
+  @spec stream_headers(keyword()) :: [{String.t(), String.t()}]
+  def stream_headers(opts) do
+    api_key = Keyword.fetch!(opts, :api_key)
+    provider_options = Keyword.get(opts, :provider_options, %{})
+    api_version = Map.get(provider_options, "anthropic-version", @default_api_version)
+
+    [
+      {"x-api-key", api_key},
+      {"anthropic-version", api_version},
+      {"content-type", "application/json"}
+    ]
+  end
+
+  @impl PhoenixAI.Provider
+  def parse_chunk(%{event: "content_block_delta", data: data}) do
+    json = Jason.decode!(data)
+    %StreamChunk{delta: get_in(json, ["delta", "text"])}
+  end
+
+  def parse_chunk(%{event: "message_delta", data: data}) do
+    json = Jason.decode!(data)
+
+    %StreamChunk{
+      finish_reason: get_in(json, ["delta", "stop_reason"]),
+      usage: Map.get(json, "usage")
+    }
+  end
+
+  def parse_chunk(%{event: "message_stop", data: _}), do: %StreamChunk{finish_reason: "stop"}
+  def parse_chunk(_), do: nil
 
   defp inject_schema_and_tools(body, nil, nil), do: body
 
