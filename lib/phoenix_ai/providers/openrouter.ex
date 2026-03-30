@@ -89,6 +89,38 @@ defmodule PhoenixAI.Providers.OpenRouter do
     |> maybe_put_schema(Keyword.get(opts, :schema_json))
   end
 
+  @doc false
+  @spec build_stream_body(String.t(), [map()], keyword()) :: map()
+  def build_stream_body(model, formatted_messages, opts) do
+    build_body(model, formatted_messages, opts)
+    |> Map.put("stream", true)
+    |> Map.put("stream_options", %{"include_usage" => true})
+  end
+
+  @doc false
+  @spec stream_url(keyword()) :: String.t()
+  def stream_url(opts) do
+    base_url = Keyword.get(opts, :base_url, @default_base_url)
+    "#{base_url}/chat/completions"
+  end
+
+  @doc false
+  @spec stream_headers(keyword()) :: [{String.t(), String.t()}]
+  def stream_headers(opts) do
+    api_key = Keyword.fetch!(opts, :api_key)
+    provider_options = Keyword.get(opts, :provider_options, %{})
+
+    [
+      {"authorization", "Bearer #{api_key}"},
+      {"content-type", "application/json"}
+    ]
+    |> maybe_add_header("HTTP-Referer", Map.get(provider_options, "http_referer"))
+    |> maybe_add_header("X-Title", Map.get(provider_options, "x_title"))
+  end
+
+  @impl PhoenixAI.Provider
+  def parse_chunk(event_data), do: PhoenixAI.Providers.OpenAI.parse_chunk(event_data)
+
   # Private helpers
 
   defp do_chat(messages, opts) do
