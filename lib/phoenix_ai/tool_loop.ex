@@ -67,24 +67,38 @@ defmodule PhoenixAI.ToolLoop do
   end
 
   defp execute_tool(%ToolCall{} = tool_call, tools, opts) do
-    case find_tool(tools, tool_call.name) do
-      nil ->
-        %ToolResult{tool_call_id: tool_call.id, error: "Unknown tool: #{tool_call.name}"}
+    :telemetry.execute([:phoenix_ai, :tool_call, :start], %{}, %{tool: tool_call.name})
+    start_time = System.monotonic_time()
 
-      mod ->
-        try do
-          case mod.execute(tool_call.arguments, opts) do
-            {:ok, result} ->
-              %ToolResult{tool_call_id: tool_call.id, content: result}
+    result =
+      case find_tool(tools, tool_call.name) do
+        nil ->
+          %ToolResult{tool_call_id: tool_call.id, error: "Unknown tool: #{tool_call.name}"}
 
-            {:error, reason} ->
-              %ToolResult{tool_call_id: tool_call.id, error: to_string(reason)}
+        mod ->
+          try do
+            case mod.execute(tool_call.arguments, opts) do
+              {:ok, r} ->
+                %ToolResult{tool_call_id: tool_call.id, content: r}
+
+              {:error, reason} ->
+                %ToolResult{tool_call_id: tool_call.id, error: to_string(reason)}
+            end
+          rescue
+            e ->
+              %ToolResult{tool_call_id: tool_call.id, error: Exception.message(e)}
           end
-        rescue
-          e ->
-            %ToolResult{tool_call_id: tool_call.id, error: Exception.message(e)}
-        end
-    end
+      end
+
+    duration = System.monotonic_time() - start_time
+    status = if result.error, do: :error, else: :ok
+
+    :telemetry.execute([:phoenix_ai, :tool_call, :stop], %{duration: duration}, %{
+      tool: tool_call.name,
+      status: status
+    })
+
+    result
   end
 
   defp find_tool(tools, name) do
