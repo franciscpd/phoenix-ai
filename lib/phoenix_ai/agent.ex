@@ -51,14 +51,35 @@ defmodule PhoenixAI.Agent do
     opts: []
   ]
 
+  @start_schema NimbleOptions.new!(
+                  provider: [type: :atom, required: true, doc: "Provider identifier"],
+                  model: [type: :string, doc: "Model identifier"],
+                  system: [type: :string, doc: "System prompt"],
+                  tools: [type: {:list, :atom}, default: [], doc: "Tool modules"],
+                  manage_history: [
+                    type: :boolean,
+                    default: true,
+                    doc: "Auto-accumulate messages between prompts"
+                  ],
+                  schema: [type: :any, doc: "JSON schema for structured output"],
+                  name: [type: :any, doc: "GenServer name registration"],
+                  api_key: [type: :string, doc: "API key"]
+                )
+
   # --- Public API ---
 
   @doc "Starts an Agent GenServer. See module docs for options."
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    {name, init_opts} = Keyword.pop(opts, :name)
-    gen_opts = if name, do: [name: name], else: []
-    GenServer.start_link(__MODULE__, init_opts, gen_opts)
+    case NimbleOptions.validate(opts, @start_schema) do
+      {:ok, validated_opts} ->
+        {name, init_opts} = Keyword.pop(validated_opts, :name)
+        gen_opts = if name, do: [name: name], else: []
+        GenServer.start_link(__MODULE__, init_opts, gen_opts)
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   @doc """
