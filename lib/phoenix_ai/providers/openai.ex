@@ -136,10 +136,27 @@ defmodule PhoenixAI.Providers.OpenAI do
     choice = json |> Map.get("choices", []) |> List.first(%{})
     delta = Map.get(choice, "delta", %{})
 
+    tool_call_delta = extract_tool_call_delta(Map.get(delta, "tool_calls"))
+
     %StreamChunk{
       delta: Map.get(delta, "content"),
+      tool_call_delta: tool_call_delta,
       finish_reason: Map.get(choice, "finish_reason"),
       usage: Map.get(json, "usage")
+    }
+  end
+
+  defp extract_tool_call_delta(nil), do: nil
+  defp extract_tool_call_delta([]), do: nil
+
+  defp extract_tool_call_delta([tc | _]) do
+    function = Map.get(tc, "function", %{})
+
+    %{
+      index: Map.get(tc, "index", 0),
+      id: Map.get(tc, "id"),
+      name: Map.get(function, "name"),
+      arguments: Map.get(function, "arguments", "")
     }
   end
 
