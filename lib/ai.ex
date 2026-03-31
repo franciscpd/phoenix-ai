@@ -129,10 +129,15 @@ defmodule AI do
         tools = Keyword.get(opts, :tools)
         stream_opts = Keyword.drop(opts, [:on_chunk, :to, :schema, :tools])
 
-        if tools && tools != [] do
-          PhoenixAI.Stream.run_with_tools(provider_mod, messages, callback, tools, stream_opts)
-        else
-          PhoenixAI.Stream.run(provider_mod, messages, callback, stream_opts)
+        cond do
+          tools && tools != [] ->
+            PhoenixAI.Stream.run_with_tools(provider_mod, messages, callback, tools, stream_opts)
+
+          function_exported?(provider_mod, :stream, 3) ->
+            provider_mod.stream(messages, callback, stream_opts)
+
+          true ->
+            PhoenixAI.Stream.run(provider_mod, messages, callback, stream_opts)
         end
     end
   end
