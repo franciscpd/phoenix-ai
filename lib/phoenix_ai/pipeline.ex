@@ -93,7 +93,6 @@ defmodule PhoenixAI.Pipeline do
     end)
   end
 
-  @doc false
   defp normalize_return({:ok, _} = ok), do: ok
   defp normalize_return({:error, _} = err), do: err
   defp normalize_return(other), do: {:ok, other}
