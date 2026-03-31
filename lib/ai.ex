@@ -65,8 +65,14 @@ defmodule AI do
 
       _key ->
         callback = build_callback(opts)
-        stream_opts = Keyword.drop(opts, [:on_chunk, :to, :schema])
-        PhoenixAI.Stream.run(provider_mod, messages, callback, stream_opts)
+        tools = Keyword.get(opts, :tools)
+        stream_opts = Keyword.drop(opts, [:on_chunk, :to, :schema, :tools])
+
+        if tools && tools != [] do
+          PhoenixAI.Stream.run_with_tools(provider_mod, messages, callback, tools, stream_opts)
+        else
+          PhoenixAI.Stream.run(provider_mod, messages, callback, stream_opts)
+        end
     end
   end
 
