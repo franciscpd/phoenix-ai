@@ -95,6 +95,27 @@ defmodule PhoenixAI.Team do
     end
   end
 
+  @run_schema NimbleOptions.new!(
+               max_concurrency: [
+                 type: :pos_integer,
+                 default: 5,
+                 doc: "Max parallel tasks"
+               ],
+               timeout: [
+                 type: {:custom, __MODULE__, :validate_timeout, []},
+                 default: :infinity,
+                 doc: "Per-task timeout in ms (:infinity or positive integer)"
+               ],
+               ordered: [type: :boolean, default: true, doc: "Preserve input order in results"]
+             )
+
+  @doc false
+  def validate_timeout(:infinity), do: {:ok, :infinity}
+  def validate_timeout(val) when is_integer(val) and val > 0, do: {:ok, val}
+
+  def validate_timeout(val),
+    do: {:error, "expected :infinity or positive integer, got: #{inspect(val)}"}
+
   @doc """
   Executes agent specs in parallel and merges results.
 
@@ -107,8 +128,15 @@ defmodule PhoenixAI.Team do
   - `:timeout` — per-task timeout in ms (default: `:infinity`)
   - `:ordered` — preserve input order in results (default: `true`)
   """
-  @spec run([agent_spec()], merge_fn(), keyword()) :: {:ok, term()}
+  @spec run([agent_spec()], merge_fn(), keyword()) :: {:ok, term()} | {:error, term()}
   def run(specs, merge_fn, opts \\ []) do
+    case NimbleOptions.validate(opts, @run_schema) do
+      {:ok, validated_opts} -> do_run(specs, merge_fn, validated_opts)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp do_run(specs, merge_fn, opts) do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :timeout, :infinity)
     ordered = Keyword.get(opts, :ordered, true)
