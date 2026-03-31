@@ -107,9 +107,45 @@ defmodule PhoenixAI.Providers.Anthropic do
   end
 
   @impl PhoenixAI.Provider
+  def parse_chunk(%{event: "content_block_start", data: data}) do
+    json = Jason.decode!(data)
+    content_block = Map.get(json, "content_block", %{})
+
+    case Map.get(content_block, "type") do
+      "tool_use" ->
+        %StreamChunk{
+          tool_call_delta: %{
+            index: Map.get(json, "index", 0),
+            id: Map.get(content_block, "id"),
+            name: Map.get(content_block, "name"),
+            arguments: ""
+          }
+        }
+
+      _ ->
+        nil
+    end
+  end
+
   def parse_chunk(%{event: "content_block_delta", data: data}) do
     json = Jason.decode!(data)
-    %StreamChunk{delta: get_in(json, ["delta", "text"])}
+    delta = Map.get(json, "delta", %{})
+
+    case Map.get(delta, "type") do
+      "text_delta" ->
+        %StreamChunk{delta: Map.get(delta, "text")}
+
+      "input_json_delta" ->
+        %StreamChunk{
+          tool_call_delta: %{
+            index: Map.get(json, "index", 0),
+            arguments: Map.get(delta, "partial_json", "")
+          }
+        }
+
+      _ ->
+        nil
+    end
   end
 
   def parse_chunk(%{event: "message_delta", data: data}) do
