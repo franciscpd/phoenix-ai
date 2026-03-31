@@ -138,4 +138,95 @@ defmodule PhoenixAI.Providers.TestProviderTest do
       assert TestProvider.get_calls(self()) == []
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Task 3: Stream & Async Isolation
+  # ---------------------------------------------------------------------------
+
+  describe "stream/3" do
+    test "emits one StreamChunk per grapheme then a final stop chunk" do
+      content = "Hi!"
+      response = %Response{content: content, usage: %{tokens: 3}}
+      TestProvider.put_responses(self(), [{:ok, response}])
+
+      test_pid = self()
+      collector = fn chunk -> send(test_pid, {:chunk, chunk}) end
+
+      result = TestProvider.stream([], collector, [])
+
+      assert {:ok, ^response} = result
+
+      # Collect all received chunks
+      received =
+        Enum.reduce_while(1..100, [], fn _, acc ->
+          receive do
+            {:chunk, chunk} -> {:cont, [chunk | acc]}
+          after
+            0 -> {:halt, acc}
+          end
+        end)
+        |> Enum.reverse()
+
+      graphemes = String.graphemes(content)
+      assert length(received) == length(graphemes) + 1
+
+      content_chunks = Enum.take(received, length(graphemes))
+
+      Enum.zip(graphemes, content_chunks)
+      |> Enum.each(fn {grapheme, chunk} ->
+        assert %StreamChunk{delta: ^grapheme} = chunk
+      end)
+
+      stop_chunk = List.last(received)
+      assert %StreamChunk{finish_reason: "stop", usage: %{tokens: 3}} = stop_chunk
+    end
+
+    test "propagates error from chat/2 when queue is exhausted" do
+      result = TestProvider.stream([], fn _chunk -> :ok end, [])
+      assert result == {:error, :no_more_responses}
+    end
+  end
+
+  describe "async isolation" do
+    test "two concurrent tasks have independent state" do
+      pid_a = self()
+
+      task_b =
+        Task.async(fn ->
+          {:ok, _} = TestProvider.start_state(self())
+
+          TestProvider.put_responses(self(), [{:ok, %Response{content: "from B"}}])
+          result = TestProvider.chat([], [])
+          TestProvider.stop_state(self())
+          result
+        end)
+
+      TestProvider.put_responses(pid_a, [{:ok, %Response{content: "from A"}}])
+
+      result_a = TestProvider.chat([], [])
+      result_b = Task.await(task_b)
+
+      assert {:ok, %Response{content: "from A"}} = result_a
+      assert {:ok, %Response{content: "from B"}} = result_b
+    end
+
+    test "stopping one process state does not affect another" do
+      task =
+        Task.async(fn ->
+          {:ok, _} = TestProvider.start_state(self())
+          TestProvider.put_responses(self(), [{:ok, %Response{content: "task response"}}])
+          result = TestProvider.chat([], [])
+          TestProvider.stop_state(self())
+          result
+        end)
+
+      TestProvider.put_responses(self(), [{:ok, %Response{content: "main response"}}])
+
+      result_task = Task.await(task)
+      result_main = TestProvider.chat([], [])
+
+      assert {:ok, %Response{content: "task response"}} = result_task
+      assert {:ok, %Response{content: "main response"}} = result_main
+    end
+  end
 end
