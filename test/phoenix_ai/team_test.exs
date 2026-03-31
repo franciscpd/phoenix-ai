@@ -49,5 +49,56 @@ defmodule PhoenixAI.TeamTest do
       assert {:ok, results} = Team.run(specs, merge_fn)
       assert [{:ok, "good"}, {:error, {:task_failed, "boom"}}, {:ok, "also_good"}] = results
     end
+
+    test "empty specs list passes empty list to merge" do
+      merge_fn = fn results -> length(results) end
+
+      assert {:ok, 0} = Team.run([], merge_fn)
+    end
+
+    test "max_concurrency: 1 executes specs sequentially" do
+      specs = [
+        fn ->
+          Process.sleep(50)
+          {:ok, "a"}
+        end,
+        fn ->
+          Process.sleep(50)
+          {:ok, "b"}
+        end,
+        fn ->
+          Process.sleep(50)
+          {:ok, "c"}
+        end
+      ]
+
+      merge_fn = fn results -> Enum.map(results, fn {:ok, v} -> v end) end
+
+      {elapsed, {:ok, result}} = :timer.tc(fn -> Team.run(specs, merge_fn, max_concurrency: 1) end)
+
+      assert result == ["a", "b", "c"]
+      # Sequential: ~150ms minimum. Parallel would be ~50ms.
+      assert elapsed > 120_000
+    end
+
+    test "results are in the same order as specs regardless of completion time" do
+      specs = [
+        fn ->
+          Process.sleep(100)
+          {:ok, "slow"}
+        end,
+        fn ->
+          {:ok, "fast"}
+        end,
+        fn ->
+          Process.sleep(50)
+          {:ok, "medium"}
+        end
+      ]
+
+      merge_fn = fn results -> Enum.map(results, fn {:ok, v} -> v end) end
+
+      assert {:ok, ["slow", "fast", "medium"]} = Team.run(specs, merge_fn)
+    end
   end
 end
