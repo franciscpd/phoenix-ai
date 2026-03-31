@@ -65,8 +65,30 @@ defmodule PhoenixAI.MixProject do
 
   defp docs do
     [
-      main: "readme",
-      extras: ["README.md"]
+      main: "getting-started",
+      extras: [
+        "guides/getting-started.md",
+        "guides/provider-setup.md",
+        "guides/agents-and-tools.md",
+        "guides/pipelines-and-teams.md",
+        "guides/cookbook/rag-pipeline.md",
+        "guides/cookbook/multi-agent-team.md",
+        "guides/cookbook/streaming-liveview.md",
+        "guides/cookbook/custom-tools.md"
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\/[^\/]+\.md$/,
+        Cookbook: ~r/guides\/cookbook\/.+\.md$/
+      ],
+      groups_for_modules: [
+        Core: [AI, PhoenixAI.Message, PhoenixAI.Response, PhoenixAI.Conversation],
+        Providers: [~r/PhoenixAI\.Providers\./],
+        "Tools & Agent": [PhoenixAI.Tool, PhoenixAI.Agent, PhoenixAI.ToolLoop],
+        Orchestration: [PhoenixAI.Pipeline, PhoenixAI.Team],
+        Streaming: [PhoenixAI.Stream, PhoenixAI.StreamChunk],
+        "Schema & Config": [PhoenixAI.Schema, PhoenixAI.Config],
+        Testing: [PhoenixAI.Test, PhoenixAI.Providers.TestProvider]
+      ]
     ]
   end
 end
