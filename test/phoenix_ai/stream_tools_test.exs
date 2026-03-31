@@ -1,7 +1,7 @@
 defmodule PhoenixAI.StreamToolsTest do
   use ExUnit.Case, async: true
 
-  alias PhoenixAI.{Message, Response, Stream, StreamChunk, ToolCall}
+  alias PhoenixAI.{Stream, StreamChunk, ToolCall}
 
   defmodule WeatherTool do
     def name, do: "get_weather"
@@ -14,8 +14,11 @@ defmodule PhoenixAI.StreamToolsTest do
     @moduledoc false
     alias PhoenixAI.StreamChunk
 
-    def format_messages(messages), do: Enum.map(messages, fn m -> %{"role" => to_string(m.role)} end)
-    def format_tools(_tools), do: [%{"type" => "function", "function" => %{"name" => "get_weather"}}]
+    def format_messages(messages),
+      do: Enum.map(messages, fn m -> %{"role" => to_string(m.role)} end)
+
+    def format_tools(_tools),
+      do: [%{"type" => "function", "function" => %{"name" => "get_weather"}}]
 
     def build_stream_body(model, formatted_messages, opts) do
       %{"model" => model, "messages" => formatted_messages, "stream" => true}
@@ -61,7 +64,11 @@ defmodule PhoenixAI.StreamToolsTest do
 
   describe "run_with_tools/5" do
     test "returns {:error, :max_iterations_reached} when limit exceeded" do
-      result = Stream.run_with_tools(FakeStreamProvider, [], fn _ -> nil end, [WeatherTool], max_iterations: 0)
+      result =
+        Stream.run_with_tools(FakeStreamProvider, [], fn _ -> nil end, [WeatherTool],
+          max_iterations: 0
+        )
+
       assert {:error, :max_iterations_reached} = result
     end
   end
@@ -91,7 +98,9 @@ defmodule PhoenixAI.StreamToolsTest do
       assert final_acc.finished == true
 
       response = Stream.build_response(final_acc)
-      assert [%ToolCall{name: "get_weather", arguments: %{"city" => "London"}}] = response.tool_calls
+
+      assert [%ToolCall{name: "get_weather", arguments: %{"city" => "London"}}] =
+               response.tool_calls
     end
 
     test "Anthropic fixture produces correct tool calls via process_sse_events" do

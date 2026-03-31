@@ -83,7 +83,9 @@ defmodule PhoenixAI.Providers.OpenAIStreamToolsTest do
         })
 
       chunk = OpenAI.parse_chunk(%{data: data})
-      assert %StreamChunk{tool_call_delta: %{index: 1, id: "call_def456", name: "get_time"}} = chunk
+
+      assert %StreamChunk{tool_call_delta: %{index: 1, id: "call_def456", name: "get_time"}} =
+               chunk
     end
 
     test "text-only chunks still work (no tool_calls key)" do

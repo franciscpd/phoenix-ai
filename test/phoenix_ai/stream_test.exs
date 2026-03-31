@@ -144,6 +144,7 @@ defmodule PhoenixAI.StreamTest do
       raw = File.read!("test/fixtures/sse/openai_simple.sse")
 
       callback = fn chunk -> send(self(), {:chunk, chunk}) end
+
       acc = %{
         remainder: "",
         provider_mod: FakeOpenAIProvider,
@@ -201,17 +202,21 @@ defmodule PhoenixAI.StreamTest do
 
         def parse_chunk(%{event: "message_delta", data: data}) do
           json = Jason.decode!(data)
+
           %StreamChunk{
             finish_reason: get_in(json, ["delta", "stop_reason"]),
             usage: Map.get(json, "usage")
           }
         end
 
-        def parse_chunk(%{event: "message_stop", data: _}), do: %StreamChunk{finish_reason: "stop"}
+        def parse_chunk(%{event: "message_stop", data: _}),
+          do: %StreamChunk{finish_reason: "stop"}
+
         def parse_chunk(_), do: nil
       end
 
       callback = fn chunk -> send(self(), {:chunk, chunk}) end
+
       acc = %{
         remainder: "",
         provider_mod: FakeAnthropicProvider,
@@ -302,9 +307,10 @@ defmodule PhoenixAI.StreamTest do
         tool_calls_acc: %{}
       }
 
-      final_acc = Enum.reduce(chunks, acc, fn chunk_data, acc ->
-        Stream.process_sse_events(chunk_data, acc)
-      end)
+      final_acc =
+        Enum.reduce(chunks, acc, fn chunk_data, acc ->
+          Stream.process_sse_events(chunk_data, acc)
+        end)
 
       assert final_acc.tool_calls_acc[0].id == "call_abc"
       assert final_acc.tool_calls_acc[0].name == "get_weather"

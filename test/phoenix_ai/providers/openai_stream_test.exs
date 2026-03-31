@@ -9,8 +9,7 @@ defmodule PhoenixAI.Providers.OpenAIStreamTest do
       chunk =
         OpenAI.parse_chunk(%{
           event: nil,
-          data:
-            ~s({"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]})
+          data: ~s({"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]})
         })
 
       assert %StreamChunk{delta: "Hello", finish_reason: nil} = chunk
@@ -25,8 +24,7 @@ defmodule PhoenixAI.Providers.OpenAIStreamTest do
       chunk =
         OpenAI.parse_chunk(%{
           event: nil,
-          data:
-            ~s({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]})
+          data: ~s({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]})
         })
 
       assert %StreamChunk{delta: nil, finish_reason: "stop"} = chunk
@@ -36,8 +34,7 @@ defmodule PhoenixAI.Providers.OpenAIStreamTest do
       chunk =
         OpenAI.parse_chunk(%{
           event: nil,
-          data:
-            ~s({"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]})
+          data: ~s({"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]})
         })
 
       assert %StreamChunk{delta: nil, finish_reason: nil} = chunk

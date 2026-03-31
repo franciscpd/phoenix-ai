@@ -41,6 +41,7 @@ defmodule PhoenixAI.Stream do
       content: "",
       usage: nil,
       finished: false,
+      finish_reason: nil,
       status: nil,
       tool_calls_acc: %{}
     }
@@ -162,8 +163,13 @@ defmodule PhoenixAI.Stream do
 
     new_usage = chunk.usage || acc.usage
     new_finished = acc.finished or chunk.finish_reason != nil
+    new_finish_reason = chunk.finish_reason || Map.get(acc, :finish_reason)
 
-    %{acc | content: new_content, usage: new_usage, finished: new_finished}
+    acc
+    |> Map.put(:content, new_content)
+    |> Map.put(:usage, new_usage)
+    |> Map.put(:finished, new_finished)
+    |> Map.put(:finish_reason, new_finish_reason)
   end
 
   @doc false
@@ -179,7 +185,7 @@ defmodule PhoenixAI.Stream do
       content: acc.content,
       tool_calls: tool_calls,
       usage: acc.usage || %{},
-      finish_reason: "stop",
+      finish_reason: Map.get(acc, :finish_reason) || "stop",
       provider_response: %{}
     }
   end

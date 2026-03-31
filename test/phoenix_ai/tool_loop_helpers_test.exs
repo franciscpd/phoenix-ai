@@ -7,7 +7,9 @@ defmodule PhoenixAI.ToolLoopHelpersTest do
     test "builds assistant message with tool calls from response" do
       response = %Response{
         content: "I'll check that for you.",
-        tool_calls: [%ToolCall{id: "call_abc", name: "get_weather", arguments: %{"city" => "London"}}]
+        tool_calls: [
+          %ToolCall{id: "call_abc", name: "get_weather", arguments: %{"city" => "London"}}
+        ]
       }
 
       msg = ToolLoop.build_assistant_message(response)

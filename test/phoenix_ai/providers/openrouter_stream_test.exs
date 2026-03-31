@@ -6,10 +6,12 @@ defmodule PhoenixAI.Providers.OpenRouterStreamTest do
 
   describe "parse_chunk/1 delegates to OpenAI" do
     test "extracts delta content" do
-      chunk = OpenRouter.parse_chunk(%{
-        event: nil,
-        data: ~s({"choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]})
-      })
+      chunk =
+        OpenRouter.parse_chunk(%{
+          event: nil,
+          data: ~s({"choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]})
+        })
+
       assert %StreamChunk{delta: "Hi", finish_reason: nil} = chunk
     end
 
@@ -21,7 +23,13 @@ defmodule PhoenixAI.Providers.OpenRouterStreamTest do
 
   describe "build_stream_body/3" do
     test "adds stream: true and stream_options" do
-      body = OpenRouter.build_stream_body("mistralai/mistral-7b", [%{"role" => "user", "content" => "Hi"}], [])
+      body =
+        OpenRouter.build_stream_body(
+          "mistralai/mistral-7b",
+          [%{"role" => "user", "content" => "Hi"}],
+          []
+        )
+
       assert body["stream"] == true
       assert body["stream_options"] == %{"include_usage" => true}
       assert body["model"] == "mistralai/mistral-7b"
