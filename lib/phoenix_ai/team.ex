@@ -30,7 +30,7 @@ defmodule PhoenixAI.Team do
       MyTeam.run()
   """
 
-  @type agent_spec :: (() -> {:ok, term()} | {:error, term()} | term())
+  @type agent_spec :: (-> {:ok, term()} | {:error, term()} | term())
   @type merge_fn :: ([{:ok, term()} | {:error, term()}] -> term())
 
   @default_max_concurrency 5

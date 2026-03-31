@@ -74,7 +74,8 @@ defmodule PhoenixAI.TeamTest do
 
       merge_fn = fn results -> Enum.map(results, fn {:ok, v} -> v end) end
 
-      {elapsed, {:ok, result}} = :timer.tc(fn -> Team.run(specs, merge_fn, max_concurrency: 1) end)
+      {elapsed, {:ok, result}} =
+        :timer.tc(fn -> Team.run(specs, merge_fn, max_concurrency: 1) end)
 
       assert result == ["a", "b", "c"]
       # Sequential: ~150ms minimum. Parallel would be ~50ms.
