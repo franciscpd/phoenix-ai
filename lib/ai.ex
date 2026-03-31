@@ -23,30 +23,52 @@ defmodule AI do
           {:ok, PhoenixAI.Response.t()} | {:error, term()}
   def chat(messages, opts \\ []) do
     provider_atom = opts[:provider] || default_provider()
+    meta = %{provider: provider_atom, model: opts[:model]}
 
-    case resolve_provider(provider_atom) do
-      {:ok, provider_mod} ->
-        merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
-        dispatch(provider_mod, messages, merged_opts, provider_atom)
+    :telemetry.span([:phoenix_ai, :chat], meta, fn ->
+      result =
+        case resolve_provider(provider_atom) do
+          {:ok, provider_mod} ->
+            merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
+            dispatch(provider_mod, messages, merged_opts, provider_atom)
 
-      {:error, _} = error ->
-        error
-    end
+          {:error, _} = error ->
+            error
+        end
+
+      stop_meta = Map.merge(meta, telemetry_stop_meta(result))
+      {result, stop_meta}
+    end)
   end
 
   @spec stream([PhoenixAI.Message.t()], keyword()) ::
           {:ok, PhoenixAI.Response.t()} | {:error, term()}
   def stream(messages, opts \\ []) do
     provider_atom = opts[:provider] || default_provider()
+    meta = %{provider: provider_atom, model: opts[:model]}
 
-    case resolve_provider(provider_atom) do
-      {:ok, provider_mod} ->
-        merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
-        dispatch_stream(provider_mod, messages, merged_opts, provider_atom)
+    :telemetry.span([:phoenix_ai, :stream], meta, fn ->
+      result =
+        case resolve_provider(provider_atom) do
+          {:ok, provider_mod} ->
+            merged_opts = Config.resolve(provider_atom, Keyword.delete(opts, :provider))
+            dispatch_stream(provider_mod, messages, merged_opts, provider_atom)
 
-      {:error, _} = error ->
-        error
-    end
+          {:error, _} = error ->
+            error
+        end
+
+      stop_meta = Map.merge(meta, telemetry_stop_meta(result))
+      {result, stop_meta}
+    end)
+  end
+
+  defp telemetry_stop_meta({:ok, %PhoenixAI.Response{usage: usage}}) do
+    %{status: :ok, usage: usage || %{}}
+  end
+
+  defp telemetry_stop_meta({:error, _}) do
+    %{status: :error}
   end
 
   @doc false
