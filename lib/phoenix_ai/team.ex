@@ -35,6 +35,66 @@ defmodule PhoenixAI.Team do
 
   @default_max_concurrency 5
 
+  defmacro __using__(_opts) do
+    quote do
+      import PhoenixAI.Team, only: [agent: 2, merge: 1]
+      Module.register_attribute(__MODULE__, :team_agents, accumulate: true)
+      Module.register_attribute(__MODULE__, :team_merge_fn, accumulate: false)
+      @before_compile PhoenixAI.Team
+    end
+  end
+
+  @doc """
+  Defines a named agent spec in a team module.
+
+  The block must return a zero-arity function `fn -> {:ok, result} | {:error, reason} end`.
+  """
+  defmacro agent(name, do: block) do
+    escaped_block = Macro.escape(block)
+
+    quote do
+      @team_agents {unquote(name), unquote(escaped_block)}
+    end
+  end
+
+  @doc """
+  Defines the merge function for a team module.
+
+  The block must return a function that accepts a list of result tuples.
+  """
+  defmacro merge(do: block) do
+    escaped_block = Macro.escape(block)
+
+    quote do
+      @team_merge_fn unquote(escaped_block)
+    end
+  end
+
+  @doc false
+  defmacro __before_compile__(env) do
+    agents = Module.get_attribute(env.module, :team_agents) |> Enum.reverse()
+    merge_fn_ast = Module.get_attribute(env.module, :team_merge_fn)
+
+    agent_funs_ast = Enum.map(agents, fn {_name, fun_ast} -> fun_ast end)
+    agent_names = Enum.map(agents, fn {name, _fun_ast} -> name end)
+
+    quote do
+      @doc "Returns the list of agent spec functions in definition order."
+      def agents, do: unquote(agent_funs_ast)
+
+      @doc "Returns the list of agent name atoms in definition order."
+      def agent_names, do: unquote(agent_names)
+
+      @doc "Returns the merge function."
+      def merge_fn, do: unquote(merge_fn_ast)
+
+      @doc "Runs the team with the given options."
+      def run(opts \\ []) do
+        PhoenixAI.Team.run(agents(), merge_fn(), opts)
+      end
+    end
+  end
+
   @doc """
   Executes agent specs in parallel and merges results.
 
