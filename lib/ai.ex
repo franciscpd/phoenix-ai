@@ -17,7 +17,7 @@ defmodule AI do
 
   alias PhoenixAI.{Config, Schema}
 
-  @known_providers [:openai, :anthropic, :openrouter]
+  @known_providers [:openai, :anthropic, :openrouter, :test]
 
   @spec chat([PhoenixAI.Message.t()], keyword()) ::
           {:ok, PhoenixAI.Response.t()} | {:error, term()}
@@ -121,6 +121,7 @@ defmodule AI do
   def provider_module(:openai), do: PhoenixAI.Providers.OpenAI
   def provider_module(:anthropic), do: PhoenixAI.Providers.Anthropic
   def provider_module(:openrouter), do: PhoenixAI.Providers.OpenRouter
+  def provider_module(:test), do: PhoenixAI.Providers.TestProvider
   def provider_module(mod) when is_atom(mod), do: mod
 
   defp resolve_provider(provider) when provider in @known_providers do
