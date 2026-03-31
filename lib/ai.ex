@@ -19,9 +19,48 @@ defmodule AI do
 
   @known_providers [:openai, :anthropic, :openrouter, :test]
 
+  @chat_schema NimbleOptions.new!(
+                 provider: [type: :atom, doc: "Provider identifier (:openai, :anthropic, :openrouter, :test)"],
+                 model: [type: :string, doc: "Model identifier"],
+                 api_key: [type: :string, doc: "API key — overrides config/env resolution"],
+                 temperature: [type: :float, doc: "Sampling temperature (0.0-2.0)"],
+                 max_tokens: [type: :pos_integer, doc: "Maximum tokens in response"],
+                 tools: [type: {:list, :atom}, default: [], doc: "Tool modules implementing PhoenixAI.Tool"],
+                 schema: [type: :any, doc: "JSON schema map for structured output validation"],
+                 provider_options: [
+                   type: {:map, :atom, :any},
+                   default: %{},
+                   doc: "Provider-specific passthrough"
+                 ]
+               )
+
+  @stream_schema NimbleOptions.new!(
+                   provider: [type: :atom, doc: "Provider identifier (:openai, :anthropic, :openrouter, :test)"],
+                   model: [type: :string, doc: "Model identifier"],
+                   api_key: [type: :string, doc: "API key — overrides config/env resolution"],
+                   temperature: [type: :float, doc: "Sampling temperature (0.0-2.0)"],
+                   max_tokens: [type: :pos_integer, doc: "Maximum tokens in response"],
+                   tools: [type: {:list, :atom}, default: [], doc: "Tool modules implementing PhoenixAI.Tool"],
+                   schema: [type: :any, doc: "JSON schema map for structured output validation"],
+                   provider_options: [
+                     type: {:map, :atom, :any},
+                     default: %{},
+                     doc: "Provider-specific passthrough"
+                   ],
+                   on_chunk: [type: {:fun, 1}, doc: "Callback receiving %StreamChunk{} structs"],
+                   to: [type: :pid, doc: "PID to receive {:phoenix_ai, {:chunk, chunk}} messages"]
+                 )
+
   @spec chat([PhoenixAI.Message.t()], keyword()) ::
           {:ok, PhoenixAI.Response.t()} | {:error, term()}
   def chat(messages, opts \\ []) do
+    case NimbleOptions.validate(opts, @chat_schema) do
+      {:ok, validated_opts} -> do_chat(messages, validated_opts)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp do_chat(messages, opts) do
     provider_atom = opts[:provider] || default_provider()
     meta = %{provider: provider_atom, model: opts[:model]}
 
@@ -44,6 +83,13 @@ defmodule AI do
   @spec stream([PhoenixAI.Message.t()], keyword()) ::
           {:ok, PhoenixAI.Response.t()} | {:error, term()}
   def stream(messages, opts \\ []) do
+    case NimbleOptions.validate(opts, @stream_schema) do
+      {:ok, validated_opts} -> do_stream(messages, validated_opts)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp do_stream(messages, opts) do
     provider_atom = opts[:provider] || default_provider()
     meta = %{provider: provider_atom, model: opts[:model]}
 
