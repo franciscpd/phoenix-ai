@@ -13,5 +13,21 @@ defmodule PhoenixAI.PipelineTest do
 
       assert {:ok, "hello step1 step2 step3"} = Pipeline.run(steps, "hello")
     end
+
+    test "halts on first {:error, _} and does not execute subsequent steps" do
+      test_pid = self()
+
+      steps = [
+        fn input -> {:ok, input <> " step1"} end,
+        fn _input -> {:error, :something_failed} end,
+        fn input ->
+          send(test_pid, :step3_executed)
+          {:ok, input <> " step3"}
+        end
+      ]
+
+      assert {:error, :something_failed} = Pipeline.run(steps, "hello")
+      refute_received :step3_executed
+    end
   end
 end
