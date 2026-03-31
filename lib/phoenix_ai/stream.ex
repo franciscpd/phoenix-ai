@@ -172,17 +172,7 @@ defmodule PhoenixAI.Stream do
       (Map.get(acc, :tool_calls_acc) || %{})
       |> Enum.sort_by(fn {index, _} -> index end)
       |> Enum.map(fn {_, tc} ->
-        args =
-          if tc.arguments != "" do
-            case Jason.decode(tc.arguments) do
-              {:ok, parsed} -> parsed
-              {:error, _} -> %{}
-            end
-          else
-            %{}
-          end
-
-        %ToolCall{id: tc.id, name: tc.name, arguments: args}
+        %ToolCall{id: tc.id, name: tc.name, arguments: decode_arguments(tc.arguments)}
       end)
 
     %Response{
@@ -192,5 +182,14 @@ defmodule PhoenixAI.Stream do
       finish_reason: "stop",
       provider_response: %{}
     }
+  end
+
+  defp decode_arguments(""), do: %{}
+
+  defp decode_arguments(args) do
+    case Jason.decode(args) do
+      {:ok, parsed} -> parsed
+      {:error, _} -> %{}
+    end
   end
 end
