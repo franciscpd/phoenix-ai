@@ -59,7 +59,8 @@ defmodule PhoenixAI.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{"GitHub" => @source_url},
+      files: ~w(lib guides mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
