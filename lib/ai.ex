@@ -19,36 +19,29 @@ defmodule AI do
 
   @known_providers [:openai, :anthropic, :openrouter, :test]
 
-  @chat_schema NimbleOptions.new!(
-                 provider: [type: :atom, doc: "Provider identifier (:openai, :anthropic, :openrouter, :test)"],
-                 model: [type: :string, doc: "Model identifier"],
-                 api_key: [type: :string, doc: "API key — overrides config/env resolution"],
-                 temperature: [type: :float, doc: "Sampling temperature (0.0-2.0)"],
-                 max_tokens: [type: :pos_integer, doc: "Maximum tokens in response"],
-                 tools: [type: {:list, :atom}, default: [], doc: "Tool modules implementing PhoenixAI.Tool"],
-                 schema: [type: :any, doc: "JSON schema map for structured output validation"],
-                 provider_options: [
-                   type: {:map, :atom, :any},
-                   default: %{},
-                   doc: "Provider-specific passthrough"
-                 ]
-               )
+  @common_opts [
+    provider: [type: :atom, doc: "Provider identifier (:openai, :anthropic, :openrouter, :test)"],
+    model: [type: :string, doc: "Model identifier"],
+    api_key: [type: :string, doc: "API key — overrides config/env resolution"],
+    temperature: [type: :float, doc: "Sampling temperature (0.0-2.0)"],
+    max_tokens: [type: :pos_integer, doc: "Maximum tokens in response"],
+    tools: [type: {:list, :atom}, default: [], doc: "Tool modules implementing PhoenixAI.Tool"],
+    schema: [type: :any, doc: "JSON schema map for structured output validation"],
+    provider_options: [
+      type: {:map, :atom, :any},
+      default: %{},
+      doc: "Provider-specific passthrough"
+    ]
+  ]
+
+  @chat_schema NimbleOptions.new!(@common_opts)
 
   @stream_schema NimbleOptions.new!(
-                   provider: [type: :atom, doc: "Provider identifier (:openai, :anthropic, :openrouter, :test)"],
-                   model: [type: :string, doc: "Model identifier"],
-                   api_key: [type: :string, doc: "API key — overrides config/env resolution"],
-                   temperature: [type: :float, doc: "Sampling temperature (0.0-2.0)"],
-                   max_tokens: [type: :pos_integer, doc: "Maximum tokens in response"],
-                   tools: [type: {:list, :atom}, default: [], doc: "Tool modules implementing PhoenixAI.Tool"],
-                   schema: [type: :any, doc: "JSON schema map for structured output validation"],
-                   provider_options: [
-                     type: {:map, :atom, :any},
-                     default: %{},
-                     doc: "Provider-specific passthrough"
-                   ],
-                   on_chunk: [type: {:fun, 1}, doc: "Callback receiving %StreamChunk{} structs"],
-                   to: [type: :pid, doc: "PID to receive {:phoenix_ai, {:chunk, chunk}} messages"]
+                   @common_opts ++
+                     [
+                       on_chunk: [type: {:fun, 1}, doc: "Callback receiving %StreamChunk{} structs"],
+                       to: [type: :pid, doc: "PID to receive {:phoenix_ai, {:chunk, chunk}} messages"]
+                     ]
                  )
 
   @spec chat([PhoenixAI.Message.t()], keyword()) ::

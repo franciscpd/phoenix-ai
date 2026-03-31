@@ -87,6 +87,33 @@ defmodule PhoenixAI.TestHelperTest do
     end
   end
 
+  describe "assert_called/1" do
+    test "passes when a matching call exists" do
+      set_responses([{:ok, %Response{content: "ok"}}])
+      messages = [%Message{role: :user, content: "Hello"}]
+      AI.chat(messages, provider: :test, api_key: "test")
+
+      assert_called({^messages, _opts})
+    end
+
+    test "fails when no matching call exists" do
+      set_responses([{:ok, %Response{content: "ok"}}])
+      AI.chat([%Message{role: :user, content: "Hello"}], provider: :test, api_key: "test")
+
+      assert_raise ExUnit.AssertionError, fn ->
+        other = [%Message{role: :user, content: "Goodbye"}]
+        assert_called({^other, _opts})
+      end
+    end
+
+    test "matches with partial patterns" do
+      set_responses([{:ok, %Response{content: "ok"}}])
+      AI.chat([%Message{role: :user, content: "Hello"}], provider: :test, api_key: "test")
+
+      assert_called({_messages, _opts})
+    end
+  end
+
   describe "state cleanup" do
     test "fresh test sees no stale state (verifies on_exit works)" do
       # This test verifies that the setup block gives us a clean state.

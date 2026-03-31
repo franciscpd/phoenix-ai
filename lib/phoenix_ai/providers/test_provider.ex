@@ -44,7 +44,7 @@ defmodule PhoenixAI.Providers.TestProvider do
   end
 
   def get_calls(pid) do
-    Agent.get(via(pid), fn state -> state.calls end)
+    Agent.get(via(pid), fn state -> Enum.reverse(state.calls) end)
   end
 
   defp via(pid), do: {:via, Registry, {PhoenixAI.TestRegistry, pid}}
@@ -58,7 +58,7 @@ defmodule PhoenixAI.Providers.TestProvider do
 
   defp record_call(pid, messages, opts) do
     Agent.update(via(pid), fn state ->
-      %{state | calls: state.calls ++ [{messages, opts}]}
+      %{state | calls: [{messages, opts} | state.calls]}
     end)
   end
 
