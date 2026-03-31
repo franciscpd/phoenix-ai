@@ -143,4 +143,84 @@ defmodule PhoenixAI.StreamToolsTest do
       assert_received {:chunk, %StreamChunk{tool_call_delta: %{name: "get_weather"}}}
     end
   end
+
+  describe "full fixture integration" do
+    test "OpenAI fixture: mixed text + tool call chunks are all delivered" do
+      raw = File.read!("test/fixtures/sse/openai_tool_call.sse")
+      received = :ets.new(:received, [:bag, :public])
+
+      callback = fn chunk -> :ets.insert(received, {:chunk, chunk}) end
+
+      acc = %{
+        remainder: "",
+        provider_mod: PhoenixAI.Providers.OpenAI,
+        callback: callback,
+        content: "",
+        usage: nil,
+        finished: false,
+        status: nil,
+        tool_calls_acc: %{}
+      }
+
+      final_acc = Stream.process_sse_events(raw, acc)
+      response = Stream.build_response(final_acc)
+
+      # Verify accumulated response
+      assert response.content == "Let me check."
+      assert [%ToolCall{id: "call_abc123", name: "get_weather"}] = response.tool_calls
+      assert response.tool_calls |> hd() |> Map.get(:arguments) == %{"city" => "London"}
+
+      assert response.usage == %{
+               "prompt_tokens" => 25,
+               "completion_tokens" => 18,
+               "total_tokens" => 43
+             }
+
+      # Verify all chunk types were delivered
+      all_chunks = :ets.tab2list(received) |> Enum.map(fn {:chunk, c} -> c end)
+      text_chunks = Enum.filter(all_chunks, & &1.delta)
+      tool_chunks = Enum.filter(all_chunks, & &1.tool_call_delta)
+
+      assert match?([_, _], text_chunks)
+      assert tool_chunks != []
+
+      :ets.delete(received)
+    end
+
+    test "Anthropic fixture: text block followed by tool_use block" do
+      raw = File.read!("test/fixtures/sse/anthropic_tool_call.sse")
+      received = :ets.new(:received, [:bag, :public])
+
+      callback = fn chunk -> :ets.insert(received, {:chunk, chunk}) end
+
+      acc = %{
+        remainder: "",
+        provider_mod: PhoenixAI.Providers.Anthropic,
+        callback: callback,
+        content: "",
+        usage: nil,
+        finished: false,
+        status: nil,
+        tool_calls_acc: %{}
+      }
+
+      final_acc = Stream.process_sse_events(raw, acc)
+      response = Stream.build_response(final_acc)
+
+      # Verify accumulated response
+      assert response.content == "Let me check."
+      assert [%ToolCall{id: "toolu_abc123", name: "get_weather"}] = response.tool_calls
+      assert response.tool_calls |> hd() |> Map.get(:arguments) |> Map.has_key?("city")
+
+      # Verify chunk delivery
+      all_chunks = :ets.tab2list(received) |> Enum.map(fn {:chunk, c} -> c end)
+      text_chunks = Enum.filter(all_chunks, & &1.delta)
+      tool_chunks = Enum.filter(all_chunks, & &1.tool_call_delta)
+
+      assert text_chunks != []
+      assert tool_chunks != []
+
+      :ets.delete(received)
+    end
+  end
 end
