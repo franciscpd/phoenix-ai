@@ -14,9 +14,7 @@ defmodule PhoenixAI.TeamDSLTest do
 
     merge do
       fn results ->
-        results
-        |> Enum.map(fn {:ok, val} -> val end)
-        |> Enum.join(" + ")
+        Enum.map_join(results, " + ", fn {:ok, val} -> val end)
       end
     end
   end

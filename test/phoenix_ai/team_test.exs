@@ -12,9 +12,7 @@ defmodule PhoenixAI.TeamTest do
       ]
 
       merge_fn = fn results ->
-        results
-        |> Enum.map(fn {:ok, val} -> val end)
-        |> Enum.join(", ")
+        Enum.map_join(results, ", ", fn {:ok, val} -> val end)
       end
 
       assert {:ok, "result_a, result_b, result_c"} = Team.run(specs, merge_fn)
