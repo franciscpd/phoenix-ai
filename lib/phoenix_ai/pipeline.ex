@@ -85,8 +85,21 @@ defmodule PhoenixAI.Pipeline do
 
   def run(steps, input, _opts) do
     # Accumulator is always {:ok, value}; {:error, _} is only produced via :halt.
-    Enum.reduce_while(steps, {:ok, input}, fn step, {:ok, value} ->
-      case normalize_return(step.(value)) do
+    steps
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, input}, fn {step, index}, {:ok, value} ->
+      start_time = System.monotonic_time()
+      result = normalize_return(step.(value))
+      duration = System.monotonic_time() - start_time
+      status = if match?({:ok, _}, result), do: :ok, else: :error
+
+      :telemetry.execute(
+        [:phoenix_ai, :pipeline, :step],
+        %{duration: duration},
+        %{step_index: index, status: status}
+      )
+
+      case result do
         {:ok, _} = ok -> {:cont, ok}
         {:error, _} = err -> {:halt, err}
       end

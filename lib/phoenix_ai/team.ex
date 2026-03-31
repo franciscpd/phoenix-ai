@@ -112,6 +112,7 @@ defmodule PhoenixAI.Team do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :timeout, :infinity)
     ordered = Keyword.get(opts, :ordered, true)
+    start_time = System.monotonic_time()
 
     results =
       specs
@@ -125,6 +126,16 @@ defmodule PhoenixAI.Team do
         {:ok, result} -> result
         {:exit, reason} -> {:error, {:task_failed, reason}}
       end)
+
+    duration = System.monotonic_time() - start_time
+    success_count = Enum.count(results, &match?({:ok, _}, &1))
+    error_count = length(results) - success_count
+
+    :telemetry.execute(
+      [:phoenix_ai, :team, :complete],
+      %{duration: duration},
+      %{agent_count: length(specs), success_count: success_count, error_count: error_count}
+    )
 
     {:ok, merge_fn.(results)}
   end
