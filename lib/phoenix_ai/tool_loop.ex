@@ -55,7 +55,11 @@ defmodule PhoenixAI.ToolLoop do
     end
   end
 
-  defp execute_and_build_results(tool_calls, tools, opts) do
+  @doc """
+  Executes a list of tool calls against the provided tool modules and builds
+  result messages. Used by both synchronous ToolLoop and streaming Stream module.
+  """
+  def execute_and_build_results(tool_calls, tools, opts) do
     Enum.map(tool_calls, fn tc ->
       result = execute_tool(tc, tools, opts)
       build_tool_result_message(result)
@@ -87,7 +91,11 @@ defmodule PhoenixAI.ToolLoop do
     Enum.find(tools, fn mod -> mod.name() == name end)
   end
 
-  defp build_assistant_message(%Response{} = response) do
+  @doc """
+  Builds an assistant message from a Response, preserving tool_calls for
+  conversation history. Used by both ToolLoop and Stream.run_with_tools/5.
+  """
+  def build_assistant_message(%Response{} = response) do
     %Message{
       role: :assistant,
       content: response.content,
@@ -95,7 +103,8 @@ defmodule PhoenixAI.ToolLoop do
     }
   end
 
-  defp build_tool_result_message(%ToolResult{} = result) do
+  @doc false
+  def build_tool_result_message(%ToolResult{} = result) do
     %Message{
       role: :tool,
       content: result.content || result.error,
