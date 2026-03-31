@@ -2,7 +2,6 @@ defmodule PhoenixAI.Providers.AnthropicStructuredTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.Providers.Anthropic
-  alias PhoenixAI.Response
 
   @schema_json %{
     "type" => "object",
