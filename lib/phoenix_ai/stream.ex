@@ -6,7 +6,7 @@ defmodule PhoenixAI.Stream do
   callback dispatch → Response accumulation.
   """
 
-  alias PhoenixAI.{Error, Response, StreamChunk}
+  alias PhoenixAI.{Error, Response, StreamChunk, ToolCall}
 
   @type callback :: (StreamChunk.t() -> any())
 
@@ -41,7 +41,8 @@ defmodule PhoenixAI.Stream do
       content: "",
       usage: nil,
       finished: false,
-      status: nil
+      status: nil,
+      tool_calls_acc: %{}
     }
 
     case Finch.stream(request, finch_name, acc, &handle_stream_event/2) do
@@ -92,6 +93,22 @@ defmodule PhoenixAI.Stream do
     end)
   end
 
+  defp apply_chunk(%StreamChunk{tool_call_delta: delta} = chunk, acc)
+       when is_map(delta) do
+    acc.callback.(chunk)
+
+    index = Map.get(delta, :index, 0)
+    existing = Map.get(acc.tool_calls_acc, index, %{id: nil, name: nil, arguments: ""})
+
+    updated = %{
+      id: Map.get(delta, :id) || existing.id,
+      name: Map.get(delta, :name) || existing.name,
+      arguments: existing.arguments <> (Map.get(delta, :arguments) || "")
+    }
+
+    %{acc | tool_calls_acc: Map.put(acc.tool_calls_acc, index, updated)}
+  end
+
   defp apply_chunk(nil, acc), do: acc
 
   defp apply_chunk(%StreamChunk{} = chunk, acc) do
@@ -110,8 +127,26 @@ defmodule PhoenixAI.Stream do
 
   @doc false
   def build_response(acc) do
+    tool_calls =
+      (Map.get(acc, :tool_calls_acc) || %{})
+      |> Enum.sort_by(fn {index, _} -> index end)
+      |> Enum.map(fn {_, tc} ->
+        args =
+          if tc.arguments != "" do
+            case Jason.decode(tc.arguments) do
+              {:ok, parsed} -> parsed
+              {:error, _} -> %{}
+            end
+          else
+            %{}
+          end
+
+        %ToolCall{id: tc.id, name: tc.name, arguments: args}
+      end)
+
     %Response{
       content: acc.content,
+      tool_calls: tool_calls,
       usage: acc.usage || %{},
       finish_reason: "stop",
       provider_response: %{}
