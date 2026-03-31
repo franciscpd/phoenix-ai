@@ -6,7 +6,7 @@ defmodule PhoenixAI.Stream do
   callback dispatch → Response accumulation.
   """
 
-  alias PhoenixAI.{Error, Response, StreamChunk, ToolCall}
+  alias PhoenixAI.{Error, Response, StreamChunk, ToolCall, ToolLoop}
 
   @type callback :: (StreamChunk.t() -> any())
 
@@ -54,6 +54,47 @@ defmodule PhoenixAI.Stream do
 
       {:error, exception} ->
         {:error, %Error{status: nil, message: Exception.message(exception), provider: nil}}
+    end
+  end
+
+  @doc """
+  Streaming tool loop — wraps `run/4` with tool call detection and re-streaming.
+
+  When a stream completes with tool calls, executes the tools, injects results
+  into the conversation, and re-streams. Repeats until no more tool calls or
+  max_iterations reached.
+  """
+  @spec run_with_tools(module(), [PhoenixAI.Message.t()], callback(), [module()], keyword()) ::
+          {:ok, Response.t()} | {:error, term()}
+  def run_with_tools(provider_mod, messages, callback, tools, opts) do
+    max_iterations = Keyword.get(opts, :max_iterations, 10)
+    formatted_tools = provider_mod.format_tools(tools)
+
+    stream_opts =
+      opts
+      |> Keyword.drop([:tools, :max_iterations])
+      |> Keyword.put(:tools_json, formatted_tools)
+
+    do_stream_loop(provider_mod, messages, callback, tools, stream_opts, max_iterations, 0)
+  end
+
+  defp do_stream_loop(_, _, _, _, _, max, iter) when iter >= max do
+    {:error, :max_iterations_reached}
+  end
+
+  defp do_stream_loop(provider_mod, messages, callback, tools, opts, max, iter) do
+    case run(provider_mod, messages, callback, opts) do
+      {:ok, %Response{tool_calls: []} = response} ->
+        {:ok, response}
+
+      {:ok, %Response{tool_calls: tool_calls} = response} when is_list(tool_calls) ->
+        assistant_msg = ToolLoop.build_assistant_message(response)
+        tool_result_msgs = ToolLoop.execute_and_build_results(tool_calls, tools, opts)
+        new_messages = messages ++ [assistant_msg | tool_result_msgs]
+        do_stream_loop(provider_mod, new_messages, callback, tools, opts, max, iter + 1)
+
+      {:error, _} = error ->
+        error
     end
   end
 
