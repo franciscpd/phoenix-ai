@@ -29,5 +29,28 @@ defmodule PhoenixAI.PipelineTest do
       assert {:error, :something_failed} = Pipeline.run(steps, "hello")
       refute_received :step3_executed
     end
+
+    test "empty steps list returns {:ok, input}" do
+      assert {:ok, "unchanged"} = Pipeline.run([], "unchanged")
+    end
+
+    test "non-tuple return is auto-wrapped in {:ok, value}" do
+      steps = [
+        fn input -> String.upcase(input) end,
+        fn input -> {:ok, input <> "!"} end
+      ]
+
+      assert {:ok, "HELLO!"} = Pipeline.run(steps, "hello")
+    end
+
+    test "step that raises propagates the exception" do
+      steps = [
+        fn _input -> raise "boom" end
+      ]
+
+      assert_raise RuntimeError, "boom", fn ->
+        Pipeline.run(steps, "hello")
+      end
+    end
   end
 end
