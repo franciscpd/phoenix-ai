@@ -2,7 +2,7 @@ defmodule PhoenixAI.TelemetryTest do
   use ExUnit.Case, async: false
   use PhoenixAI.Test
 
-  alias PhoenixAI.{Message, Response, ToolCall, ToolLoop, Pipeline, Team}
+  alias PhoenixAI.{Message, Pipeline, Response, Team, ToolCall, ToolLoop}
 
   # Helper to attach a telemetry handler and collect events, removing it on_exit.
   defp attach_collector(test_pid, event) do

@@ -65,7 +65,8 @@ defmodule PhoenixAI.Test do
   """
   defmacro assert_called(pattern) do
     quote do
-      calls = PhoenixAI.Providers.TestProvider.get_calls(self())
+      alias PhoenixAI.Providers.TestProvider
+      calls = TestProvider.get_calls(self())
 
       assert Enum.any?(calls, fn call -> match?(unquote(pattern), call) end),
              "Expected a call matching #{inspect(unquote(Macro.escape(pattern)))}, " <>
