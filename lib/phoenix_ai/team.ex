@@ -96,18 +96,18 @@ defmodule PhoenixAI.Team do
   end
 
   @run_schema NimbleOptions.new!(
-               max_concurrency: [
-                 type: :pos_integer,
-                 default: 5,
-                 doc: "Max parallel tasks"
-               ],
-               timeout: [
-                 type: {:custom, __MODULE__, :validate_timeout, []},
-                 default: :infinity,
-                 doc: "Per-task timeout in ms (:infinity or positive integer)"
-               ],
-               ordered: [type: :boolean, default: true, doc: "Preserve input order in results"]
-             )
+                max_concurrency: [
+                  type: :pos_integer,
+                  default: 5,
+                  doc: "Max parallel tasks"
+                ],
+                timeout: [
+                  type: {:custom, __MODULE__, :validate_timeout, []},
+                  default: :infinity,
+                  doc: "Per-task timeout in ms (:infinity or positive integer)"
+                ],
+                ordered: [type: :boolean, default: true, doc: "Preserve input order in results"]
+              )
 
   @doc false
   def validate_timeout(:infinity), do: {:ok, :infinity}

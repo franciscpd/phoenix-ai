@@ -39,8 +39,14 @@ defmodule AI do
   @stream_schema NimbleOptions.new!(
                    @common_opts ++
                      [
-                       on_chunk: [type: {:fun, 1}, doc: "Callback receiving %StreamChunk{} structs"],
-                       to: [type: :pid, doc: "PID to receive {:phoenix_ai, {:chunk, chunk}} messages"]
+                       on_chunk: [
+                         type: {:fun, 1},
+                         doc: "Callback receiving %StreamChunk{} structs"
+                       ],
+                       to: [
+                         type: :pid,
+                         doc: "PID to receive {:phoenix_ai, {:chunk, chunk}} messages"
+                       ]
                      ]
                  )
 
