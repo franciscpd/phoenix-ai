@@ -53,7 +53,7 @@ defmodule PhoenixAI.Stream do
       {:ok, final_acc} ->
         {:ok, build_response(final_acc)}
 
-      {:error, exception} ->
+      {:error, exception, _acc} ->
         {:error, %Error{status: nil, message: Exception.message(exception), provider: nil}}
     end
   end

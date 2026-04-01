@@ -25,7 +25,7 @@ defmodule PhoenixAI.Provider do
 
   @callback format_tools(tools :: [module()]) :: [map()]
 
-  @callback parse_chunk(data :: String.t()) :: PhoenixAI.StreamChunk.t()
+  @callback parse_chunk(data :: map()) :: PhoenixAI.StreamChunk.t()
 
   @optional_callbacks [stream: 3, format_tools: 1, parse_chunk: 1]
 end
