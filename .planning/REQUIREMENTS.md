@@ -41,19 +41,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| USAGE-01 | — | Pending |
-| USAGE-02 | — | Pending |
-| USAGE-03 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
-| INTG-03 | — | Pending |
-| COMPAT-01 | — | Pending |
+| USAGE-01 | Phase 11 | Pending |
+| USAGE-02 | Phase 11 | Pending |
+| USAGE-03 | Phase 11 | Pending |
+| COMPAT-01 | Phase 11 | Pending |
+| INTG-01 | Phase 12 | Pending |
+| INTG-02 | Phase 12 | Pending |
+| INTG-03 | Phase 12 | Pending |
 
 **Coverage:**
 - v0.2.0 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7 ⚠️
+- Mapped to phases: 7
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after initial definition*
+*Last updated: 2026-04-03 after roadmap creation*
