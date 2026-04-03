@@ -25,7 +25,16 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 
 ### Active
 
-(None yet — define for next milestone)
+#### Current Milestone: v0.2.0 Usage Normalization
+
+**Goal:** Normalize token usage data across all providers into a unified `PhoenixAI.Usage` struct, eliminating per-consumer normalization burden.
+
+**Target features:**
+- `PhoenixAI.Usage` struct with normalized fields
+- `Usage.from_provider/2` mapping function per provider
+- `Response.usage` type changed from `map()` to `Usage.t()`
+- `StreamChunk.usage` normalized with the same struct
+- Backward compatibility via `provider_specific` field
 
 ### Out of Scope
 
@@ -67,4 +76,4 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-03-31 after v0.1.0 milestone*
+*Last updated: 2026-04-03 after v0.2.0 milestone start*
