@@ -26,7 +26,7 @@ Add `phoenix_ai` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:phoenix_ai, "~> 0.1.0"}
+    {:phoenix_ai, "~> 0.2.0"}
   ]
 end
 ```
