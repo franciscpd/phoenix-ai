@@ -30,7 +30,15 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 
 ### Active
 
-(None yet — define for next milestone)
+- [ ] Policy behaviour with middleware-chain halt semantics
+- [ ] Request struct for guardrails pipeline context
+- [ ] PolicyViolation struct for structured error reporting
+- [ ] Pipeline executor with ordered policy chain
+- [ ] JailbreakDetector behaviour + default keyword-based implementation
+- [ ] JailbreakDetection policy with scope/threshold config
+- [ ] ContentFilter policy with pre/post user-provided function hooks
+- [ ] ToolPolicy with allowlist/denylist modes
+- [ ] Composable presets (:default, :strict, :permissive)
 
 ### Out of Scope
 
@@ -48,6 +56,7 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - **Origin:** The author is building "Chico", a micro-SaaS personal assistant currently in Laravel using laravel/ai. Once validated, the plan is to port to Phoenix/Elixir for native concurrency and scalability.
 - **Reference implementation:** [laravel/ai](https://github.com/laravel/ai) — the API surface and provider abstraction are the primary inspiration.
 - **Current state:** v0.2.0 shipped. 2,776 LOC lib, 4,752 LOC tests, 326 tests passing. Published at https://hex.pm/packages/phoenix_ai.
+- **PRD source:** Guardrails PRD defined in `phoenix_ai_store/.planning/phases/05-guardrails/BRAINSTORM.md` — stateless core policies go here, stateful policies (TokenBudget, CostBudget) stay in phoenix_ai_store.
 - **Tech stack:** Elixir, Req (sync HTTP), Finch (SSE streaming), Jason, NimbleOptions, Telemetry.
 
 ## Constraints
@@ -92,4 +101,19 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after v0.2.0 milestone*
+## Current Milestone: v0.3.0 Guardrails
+
+**Goal:** Add a middleware-chain policy system for pre-call guardrails — enforcing jailbreak detection, content filtering, tool allowlists/denylists, and composable presets.
+
+**Target features:**
+- Policy behaviour (`check/2` callback with halt semantics)
+- Request struct (guardrails pipeline context)
+- PolicyViolation struct (structured error reporting)
+- Pipeline executor (ordered policy chain, halt-on-first-violation)
+- JailbreakDetector behaviour + default keyword-based implementation
+- JailbreakDetection policy (wraps detector with scope/threshold config)
+- ContentFilter policy (pre/post user-provided function hooks)
+- ToolPolicy (allowlist/denylist for tool calls)
+- Presets (:default, :strict, :permissive)
+
+*Last updated: 2026-04-04 after v0.3.0 milestone start*
