@@ -2,6 +2,7 @@ defmodule PhoenixAI.StreamToolsTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.{Stream, StreamChunk, ToolCall}
+  alias PhoenixAI.Usage
 
   defmodule WeatherTool do
     def name, do: "get_weather"
@@ -179,11 +180,7 @@ defmodule PhoenixAI.StreamToolsTest do
       assert [%ToolCall{id: "call_abc123", name: "get_weather"}] = response.tool_calls
       assert response.tool_calls |> hd() |> Map.get(:arguments) == %{"city" => "London"}
 
-      assert response.usage == %{
-               "prompt_tokens" => 25,
-               "completion_tokens" => 18,
-               "total_tokens" => 43
-             }
+      assert %Usage{input_tokens: 25, output_tokens: 18, total_tokens: 43} = response.usage
 
       # Verify all chunk types were delivered
       all_chunks = :ets.tab2list(received) |> Enum.map(fn {:chunk, c} -> c end)

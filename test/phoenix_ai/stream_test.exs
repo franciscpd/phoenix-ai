@@ -2,9 +2,10 @@ defmodule PhoenixAI.StreamTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.{Response, Stream, StreamChunk}
+  alias PhoenixAI.Usage
 
   defmodule FakeOpenAIProvider do
-    alias PhoenixAI.StreamChunk
+    alias PhoenixAI.{StreamChunk, Usage}
 
     def parse_chunk(%{data: "[DONE]"}), do: %StreamChunk{finish_reason: "stop"}
 
@@ -12,11 +13,12 @@ defmodule PhoenixAI.StreamTest do
       json = Jason.decode!(data)
       choice = json |> Map.get("choices", []) |> List.first(%{})
       delta = Map.get(choice, "delta", %{})
+      raw_usage = Map.get(json, "usage")
 
       %StreamChunk{
         delta: Map.get(delta, "content"),
         finish_reason: Map.get(choice, "finish_reason"),
-        usage: Map.get(json, "usage")
+        usage: if(raw_usage, do: Usage.from_provider(:openai, raw_usage), else: nil)
       }
     end
   end
@@ -113,11 +115,7 @@ defmodule PhoenixAI.StreamTest do
 
       result = Stream.process_sse_events(sse_data, acc)
 
-      assert result.usage == %{
-               "prompt_tokens" => 10,
-               "completion_tokens" => 5,
-               "total_tokens" => 15
-             }
+      assert %Usage{input_tokens: 10, output_tokens: 5, total_tokens: 15} = result.usage
     end
 
     test "handles JSON decode errors gracefully" do
@@ -193,7 +191,7 @@ defmodule PhoenixAI.StreamTest do
       raw = File.read!("test/fixtures/sse/anthropic_simple.sse")
 
       defmodule FakeAnthropicProvider do
-        alias PhoenixAI.StreamChunk
+        alias PhoenixAI.{StreamChunk, Usage}
 
         def parse_chunk(%{event: "content_block_delta", data: data}) do
           json = Jason.decode!(data)
@@ -202,10 +200,11 @@ defmodule PhoenixAI.StreamTest do
 
         def parse_chunk(%{event: "message_delta", data: data}) do
           json = Jason.decode!(data)
+          raw_usage = Map.get(json, "usage")
 
           %StreamChunk{
             finish_reason: get_in(json, ["delta", "stop_reason"]),
-            usage: Map.get(json, "usage")
+            usage: if(raw_usage, do: Usage.from_provider(:anthropic, raw_usage), else: nil)
           }
         end
 
@@ -230,7 +229,7 @@ defmodule PhoenixAI.StreamTest do
 
       assert result.content == "Hello world"
       assert result.finished == true
-      assert result.usage == %{"output_tokens" => 2}
+      assert %Usage{output_tokens: 2} = result.usage
       assert_received {:chunk, %StreamChunk{delta: "Hello"}}
       assert_received {:chunk, %StreamChunk{delta: " world"}}
     end

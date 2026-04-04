@@ -109,7 +109,7 @@ defmodule AI do
   end
 
   defp telemetry_stop_meta({:ok, %PhoenixAI.Response{usage: usage}}) do
-    %{status: :ok, usage: usage || %{}}
+    %{status: :ok, usage: usage}
   end
 
   defp telemetry_stop_meta({:error, _}) do

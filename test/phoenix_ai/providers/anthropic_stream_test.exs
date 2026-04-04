@@ -2,7 +2,7 @@ defmodule PhoenixAI.Providers.AnthropicStreamTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.Providers.Anthropic
-  alias PhoenixAI.StreamChunk
+  alias PhoenixAI.{StreamChunk, Usage}
 
   describe "parse_chunk/1" do
     test "extracts text delta from content_block_delta event" do
@@ -35,7 +35,7 @@ defmodule PhoenixAI.Providers.AnthropicStreamTest do
             ~s({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":15}})
         })
 
-      assert %StreamChunk{usage: %{"output_tokens" => 15}} = chunk
+      assert %StreamChunk{usage: %Usage{output_tokens: 15}} = chunk
     end
 
     test "handles message_stop as finish signal" do

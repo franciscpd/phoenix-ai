@@ -2,7 +2,7 @@ defmodule PhoenixAI.Providers.OpenAIStreamTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.Providers.OpenAI
-  alias PhoenixAI.StreamChunk
+  alias PhoenixAI.{StreamChunk, Usage}
 
   describe "parse_chunk/1" do
     test "extracts delta content from SSE data" do
@@ -48,7 +48,7 @@ defmodule PhoenixAI.Providers.OpenAIStreamTest do
             ~s({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}})
         })
 
-      assert %StreamChunk{usage: %{"prompt_tokens" => 10, "completion_tokens" => 5}} = chunk
+      assert %StreamChunk{usage: %Usage{input_tokens: 10, output_tokens: 5}} = chunk
     end
   end
 

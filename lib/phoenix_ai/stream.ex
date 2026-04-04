@@ -6,7 +6,7 @@ defmodule PhoenixAI.Stream do
   callback dispatch → Response accumulation.
   """
 
-  alias PhoenixAI.{Error, Response, StreamChunk, ToolCall, ToolLoop}
+  alias PhoenixAI.{Error, Response, StreamChunk, ToolCall, ToolLoop, Usage}
 
   @type callback :: (StreamChunk.t() -> any())
 
@@ -161,7 +161,7 @@ defmodule PhoenixAI.Stream do
         do: acc.content <> chunk.delta,
         else: acc.content
 
-    new_usage = chunk.usage || acc.usage
+    new_usage = if chunk.usage != nil, do: chunk.usage, else: acc.usage
     new_finished = acc.finished or chunk.finish_reason != nil
     new_finish_reason = chunk.finish_reason || Map.get(acc, :finish_reason)
 
@@ -184,7 +184,7 @@ defmodule PhoenixAI.Stream do
     %Response{
       content: acc.content,
       tool_calls: tool_calls,
-      usage: acc.usage || %{},
+      usage: acc.usage || %Usage{},
       finish_reason: Map.get(acc, :finish_reason) || "stop",
       provider_response: %{}
     }
