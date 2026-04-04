@@ -44,14 +44,14 @@ defmodule PhoenixAI.Guardrails.Policies.ToolPolicy do
   defp validate_opts!(_allow, _deny), do: :ok
 
   defp check_tools(tool_calls, allow, nil, request) when is_list(allow) do
-    case Enum.find(tool_calls, fn tc -> tc.name not in allow end) do
+    case Enum.find(tool_calls, fn tc -> not is_binary(tc.name) or tc.name not in allow end) do
       nil -> {:ok, request}
-      tc -> halt_violation(tc.name, :allow)
+      tc -> halt_violation(tc.name || "<unnamed>", :allow)
     end
   end
 
   defp check_tools(tool_calls, nil, deny, request) when is_list(deny) do
-    case Enum.find(tool_calls, fn tc -> tc.name in deny end) do
+    case Enum.find(tool_calls, fn tc -> is_binary(tc.name) and tc.name in deny end) do
       nil -> {:ok, request}
       tc -> halt_violation(tc.name, :deny)
     end

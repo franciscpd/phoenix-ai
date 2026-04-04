@@ -73,4 +73,15 @@ defmodule PhoenixAI.Guardrails.Policies.ContentFilterTest do
                ContentFilter.check(request, pre: pre, post: post)
     end
   end
+
+  describe "check/2 with invalid hook" do
+    test "halts with error when hook is not a function" do
+      request = build_request()
+
+      assert {:halt, %PolicyViolation{} = violation} =
+               ContentFilter.check(request, pre: :not_a_function)
+
+      assert violation.reason =~ "must be a 1-arity function"
+    end
+  end
 end

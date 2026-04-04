@@ -93,4 +93,23 @@ defmodule PhoenixAI.Guardrails.Policies.ToolPolicyTest do
       assert {:ok, ^request} = ToolPolicy.check(request, [])
     end
   end
+
+  describe "check/2 with nil tool name" do
+    test "allowlist mode blocks tool with nil name" do
+      nil_tool = %ToolCall{id: "call_nil", name: nil, arguments: %{}}
+      request = build_request([nil_tool])
+
+      assert {:halt, %PolicyViolation{} = violation} =
+               ToolPolicy.check(request, allow: ["search"])
+
+      assert violation.metadata.tool == "<unnamed>"
+    end
+
+    test "denylist mode ignores tool with nil name" do
+      nil_tool = %ToolCall{id: "call_nil", name: nil, arguments: %{}}
+      request = build_request([nil_tool])
+
+      assert {:ok, ^request} = ToolPolicy.check(request, deny: ["delete_all"])
+    end
+  end
 end

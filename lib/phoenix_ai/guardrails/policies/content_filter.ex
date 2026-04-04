@@ -41,4 +41,8 @@ defmodule PhoenixAI.Guardrails.Policies.ContentFilter do
 
   defp apply_hook(nil, request), do: {:ok, request}
   defp apply_hook(hook, request) when is_function(hook, 1), do: hook.(request)
+
+  defp apply_hook(hook, _request) do
+    {:error, "ContentFilter: hook must be a 1-arity function, got: #{inspect(hook)}"}
+  end
 end
