@@ -19,8 +19,8 @@ defmodule PhoenixAI.Providers.OpenAITest do
       assert response.content == "Hello! How can I help you today?"
       assert response.finish_reason == "stop"
       assert response.model == "gpt-4o-2024-08-06"
-      assert response.usage["prompt_tokens"] == 10
-      assert response.usage["completion_tokens"] == 9
+      assert response.usage.input_tokens == 10
+      assert response.usage.output_tokens == 9
       assert response.tool_calls == []
       assert response.provider_response == fixture
     end

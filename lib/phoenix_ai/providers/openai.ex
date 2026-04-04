@@ -7,7 +7,7 @@ defmodule PhoenixAI.Providers.OpenAI do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall}
+  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall, Usage}
 
   @default_base_url "https://api.openai.com/v1"
 
@@ -54,7 +54,7 @@ defmodule PhoenixAI.Providers.OpenAI do
     content = Map.get(message, "content")
     finish_reason = Map.get(choice, "finish_reason")
     model = Map.get(body, "model")
-    usage = Map.get(body, "usage", %{})
+    usage = Usage.from_provider(:openai, Map.get(body, "usage"))
     tool_calls = parse_tool_calls(Map.get(message, "tool_calls"))
 
     %Response{
@@ -137,12 +137,13 @@ defmodule PhoenixAI.Providers.OpenAI do
     delta = Map.get(choice, "delta", %{})
 
     tool_call_delta = extract_tool_call_delta(Map.get(delta, "tool_calls"))
+    raw_usage = Map.get(json, "usage")
 
     %StreamChunk{
       delta: Map.get(delta, "content"),
       tool_call_delta: tool_call_delta,
       finish_reason: Map.get(choice, "finish_reason"),
-      usage: Map.get(json, "usage")
+      usage: if(raw_usage, do: Usage.from_provider(:openai, raw_usage), else: nil)
     }
   end
 

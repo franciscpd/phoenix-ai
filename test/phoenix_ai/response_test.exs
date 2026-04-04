@@ -3,6 +3,7 @@ defmodule PhoenixAI.ResponseTest do
 
   alias PhoenixAI.Response
   alias PhoenixAI.ToolCall
+  alias PhoenixAI.Usage
 
   describe "PhoenixAI.Response struct" do
     test "creates a response with content" do
@@ -33,7 +34,7 @@ defmodule PhoenixAI.ResponseTest do
 
     test "usage defaults to empty map" do
       resp = %Response{content: "hi"}
-      assert resp.usage == %{}
+      assert resp.usage == %Usage{}
     end
 
     test "provider_response defaults to empty map" do
@@ -47,7 +48,7 @@ defmodule PhoenixAI.ResponseTest do
     end
 
     test "usage can be set with token counts" do
-      resp = %Response{content: "hi", usage: %{input_tokens: 10, output_tokens: 5}}
+      resp = %Response{content: "hi", usage: %Usage{input_tokens: 10, output_tokens: 5}}
       assert resp.usage.input_tokens == 10
       assert resp.usage.output_tokens == 5
     end

@@ -40,7 +40,7 @@ defmodule PhoenixAI.Providers.ProviderContractTest do
         assert %Response{} = response
         assert is_binary(response.content) or is_nil(response.content)
         assert is_list(response.tool_calls)
-        assert is_map(response.usage)
+        assert %PhoenixAI.Usage{} = response.usage
         assert is_binary(response.finish_reason) or is_nil(response.finish_reason)
         assert is_binary(response.model) or is_nil(response.model)
         assert is_map(response.provider_response)
