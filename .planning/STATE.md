@@ -4,12 +4,12 @@ milestone: v0.2.0
 milestone_name: Usage Normalization
 status: planning
 stopped_at: Phase 12 context gathered
-last_updated: "2026-04-04T01:33:51.313Z"
-last_activity: 2026-04-03 — v0.2.0 roadmap created (Phases 11-12)
+last_updated: "2026-04-04T02:03:51.018Z"
+last_activity: 2026-04-04
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 1
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 Phase: 11 of 12 in v0.2.0 (Usage Struct)
 Plan: 0 of ? in current phase
 Status: Ready to plan
-Last activity: 2026-04-03 — v0.2.0 roadmap created (Phases 11-12)
+Last activity: 2026-04-04
 
 Progress: [░░░░░░░░░░] 0% (v0.2.0 milestone)
 

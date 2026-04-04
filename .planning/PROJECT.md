@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An Elixir library that provides a unified API for AI provider integration (OpenAI, Anthropic, OpenRouter) with tool calling, streaming, structured output, stateful agents, sequential pipelines, and parallel team execution — all built on BEAM/OTP concurrency primitives.
+An Elixir library that provides a unified API for AI provider integration (OpenAI, Anthropic, OpenRouter) with tool calling, streaming, structured output, stateful agents, sequential pipelines, parallel team execution, and normalized token usage — all built on BEAM/OTP concurrency primitives.
 
 ## Core Value
 
@@ -22,19 +22,15 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - ✓ Conversation history / context management — v0.1.0
 - ✓ Configurable per-provider settings (API keys, models, parameters) — v0.1.0
 - ✓ Extensible provider architecture (easy to add new providers) — v0.1.0
+- ✓ Normalized `PhoenixAI.Usage` struct with `from_provider/2` factory — v0.2.0
+- ✓ Auto-calculated `total_tokens` when provider omits it — v0.2.0
+- ✓ `Response.usage` and `StreamChunk.usage` carry `Usage.t()` — v0.2.0
+- ✓ All adapters normalize usage at parse time — v0.2.0
+- ✓ Backward compatibility via `provider_specific` field — v0.2.0
 
 ### Active
 
-#### Current Milestone: v0.2.0 Usage Normalization
-
-**Goal:** Normalize token usage data across all providers into a unified `PhoenixAI.Usage` struct, eliminating per-consumer normalization burden.
-
-**Target features:**
-- `PhoenixAI.Usage` struct with normalized fields
-- `Usage.from_provider/2` mapping function per provider
-- `Response.usage` type changed from `map()` to `Usage.t()`
-- `StreamChunk.usage` normalized with the same struct
-- Backward compatibility via `provider_specific` field
+(None yet — define for next milestone)
 
 ### Out of Scope
 
@@ -43,12 +39,15 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - Specific business-logic skills (email, calendar) — consumers define their own
 - Deployment tooling — standard Mix library distribution
 - Embedding/vector search — separate concern, may be a future companion library
+- Cost calculation helpers — consumer responsibility (e.g. phoenix_ai_store)
+- Token counting / estimation — different concern, not part of usage normalization
+- Usage aggregation / analytics — consumer-side feature, not runtime concern
 
 ## Context
 
 - **Origin:** The author is building "Chico", a micro-SaaS personal assistant currently in Laravel using laravel/ai. Once validated, the plan is to port to Phoenix/Elixir for native concurrency and scalability.
 - **Reference implementation:** [laravel/ai](https://github.com/laravel/ai) — the API surface and provider abstraction are the primary inspiration.
-- **Current state:** v0.1.0 shipped to Hex. 2,647 LOC lib, 4,555 LOC tests, 311 tests passing. Published at https://hex.pm/packages/phoenix_ai.
+- **Current state:** v0.2.0 shipped. 2,776 LOC lib, 4,752 LOC tests, 326 tests passing. Published at https://hex.pm/packages/phoenix_ai.
 - **Tech stack:** Elixir, Req (sync HTTP), Finch (SSE streaming), Jason, NimbleOptions, Telemetry.
 
 ## Constraints
@@ -70,10 +69,27 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 | No auto-starting processes | Expose child_spec/1, let consumers own supervision tree | ✓ Good — OTP-idiomatic |
 | Streaming splits Phase 6/7 | Combined streaming+tools must be tested as unit | ✓ Good — caught integration bugs |
 | Per-provider tool result injection | OpenAI vs Anthropic wire formats differ significantly | ✓ Good — clean adapters |
+| Usage normalization in adapters | Normalize at the closest point to raw data, not centrally | ✓ Good — clear boundaries |
+| Explicit atom dispatch for Usage | `from_provider(:openai, raw)` consistent with Error struct pattern | ✓ Good — idiomatic multi-clause |
+| OpenRouter own parse_chunk | Each adapter uses its own provider atom for consistency | ✓ Good — no delegation ambiguity |
+| Generic fallback in from_provider | Unknown providers auto-detected by key conventions | ✓ Good — zero-config for OpenAI-compatible providers |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-04-03 after v0.2.0 milestone start*
+*Last updated: 2026-04-04 after v0.2.0 milestone*
