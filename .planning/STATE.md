@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: Usage Normalization
-status: active
-stopped_at: null
-last_updated: "2026-04-03T20:00:00.000Z"
+status: planning
+stopped_at: Phase 11 context gathered
+last_updated: "2026-04-04T00:55:54.015Z"
 last_activity: 2026-04-03 — v0.2.0 roadmap created (Phases 11-12)
 progress:
   total_phases: 2
@@ -34,9 +34,9 @@ Progress: [░░░░░░░░░░] 0% (v0.2.0 milestone)
 
 ## Session Continuity
 
-Last session: 2026-04-03
-Stopped at: Roadmap created for v0.2.0 (Phases 11-12). Ready to plan Phase 11.
-Resume file: None
+Last session: 2026-04-04T00:55:54.013Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-usage-struct/11-CONTEXT.md
 
 ## Accumulated Context
 
