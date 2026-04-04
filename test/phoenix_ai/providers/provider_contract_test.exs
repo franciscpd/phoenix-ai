@@ -6,7 +6,7 @@ defmodule PhoenixAI.Providers.ProviderContractTest do
   1. Return a %Response{} struct from parse_response/1
   2. Populate content as String.t() | nil
   3. Populate tool_calls as a list of %ToolCall{} structs
-  4. Populate usage as a map
+  4. Populate usage as a %Usage{} struct
   5. Populate finish_reason as String.t() | nil
   6. Populate model as String.t() | nil
   7. Preserve the raw provider response in provider_response

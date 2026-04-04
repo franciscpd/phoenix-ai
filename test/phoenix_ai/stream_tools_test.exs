@@ -51,10 +51,12 @@ defmodule PhoenixAI.StreamToolsTest do
           }
         }
       else
+        raw_usage = Map.get(json, "usage")
+
         %StreamChunk{
           delta: Map.get(delta, "content"),
           finish_reason: Map.get(choice, "finish_reason"),
-          usage: Map.get(json, "usage")
+          usage: if(raw_usage, do: PhoenixAI.Usage.from_provider(:openai, raw_usage), else: nil)
         }
       end
     end

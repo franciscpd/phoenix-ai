@@ -237,15 +237,15 @@ defmodule PhoenixAI.StreamTest do
 
   describe "build_response/1" do
     test "builds Response struct from accumulated state" do
-      acc = %{content: "Hello world", usage: %{"total_tokens" => 10}, finished: true}
+      acc = %{content: "Hello world", usage: %Usage{total_tokens: 10}, finished: true}
       response = Stream.build_response(acc)
-      assert %Response{content: "Hello world", usage: %{"total_tokens" => 10}} = response
+      assert %Response{content: "Hello world", usage: %Usage{total_tokens: 10}} = response
     end
 
     test "handles nil usage" do
       acc = %{content: "test", usage: nil, finished: true}
       response = Stream.build_response(acc)
-      assert %Response{content: "test", usage: %{}} = response
+      assert %Response{content: "test", usage: %Usage{}} = response
     end
   end
 
@@ -275,10 +275,12 @@ defmodule PhoenixAI.StreamTest do
             }
           }
         else
+          raw_usage = Map.get(json, "usage")
+
           %StreamChunk{
             delta: Map.get(delta, "content"),
             finish_reason: Map.get(choice, "finish_reason"),
-            usage: Map.get(json, "usage")
+            usage: if(raw_usage, do: PhoenixAI.Usage.from_provider(:openai, raw_usage), else: nil)
           }
         end
       end
@@ -322,7 +324,7 @@ defmodule PhoenixAI.StreamTest do
     test "build_response converts tool_calls_acc to ToolCall structs" do
       acc = %{
         content: "Let me check the weather.",
-        usage: %{"prompt_tokens" => 10, "completion_tokens" => 20},
+        usage: %Usage{input_tokens: 10, output_tokens: 20, total_tokens: 30},
         tool_calls_acc: %{
           0 => %{id: "call_abc", name: "get_weather", arguments: ~s({"city": "London"})},
           1 => %{id: "call_def", name: "get_time", arguments: ~s({"timezone": "UTC"})}
@@ -347,7 +349,7 @@ defmodule PhoenixAI.StreamTest do
     test "build_response handles empty tool_calls_acc" do
       acc = %{
         content: "Hello world",
-        usage: %{},
+        usage: %Usage{},
         tool_calls_acc: %{}
       }
 
