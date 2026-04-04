@@ -36,6 +36,13 @@ defmodule PhoenixAI.Guardrails.Policies.ContentFilter do
     else
       {:error, reason} ->
         {:halt, %PolicyViolation{policy: __MODULE__, reason: reason}}
+
+      other ->
+        {:halt,
+         %PolicyViolation{
+           policy: __MODULE__,
+           reason: "ContentFilter: hook returned unexpected value: #{inspect(other)}"
+         }}
     end
   end
 

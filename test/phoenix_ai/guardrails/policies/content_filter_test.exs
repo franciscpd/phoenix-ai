@@ -83,5 +83,15 @@ defmodule PhoenixAI.Guardrails.Policies.ContentFilterTest do
 
       assert violation.reason =~ "must be a 1-arity function"
     end
+
+    test "halts with error when hook returns unexpected shape" do
+      request = build_request()
+      bad_hook = fn _req -> :ok end
+
+      assert {:halt, %PolicyViolation{} = violation} =
+               ContentFilter.check(request, pre: bad_hook)
+
+      assert violation.reason =~ "unexpected value"
+    end
   end
 end
