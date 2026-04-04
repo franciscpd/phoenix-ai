@@ -108,6 +108,24 @@ defmodule PhoenixAI.UsageTest do
       assert usage.total_tokens == 230
       assert usage.provider_specific == raw
     end
+
+    test "nil returns zero-valued usage" do
+      usage = Usage.from_provider(:openrouter, nil)
+
+      assert usage.input_tokens == 0
+      assert usage.output_tokens == 0
+      assert usage.total_tokens == 0
+      assert usage.provider_specific == %{}
+    end
+
+    test "empty map returns zero-valued usage" do
+      usage = Usage.from_provider(:openrouter, %{})
+
+      assert usage.input_tokens == 0
+      assert usage.output_tokens == 0
+      assert usage.total_tokens == 0
+      assert usage.provider_specific == %{}
+    end
   end
 
   describe "from_provider/2 with nil and empty map" do

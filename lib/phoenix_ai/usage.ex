@@ -53,6 +53,7 @@ defmodule PhoenixAI.Usage do
     %__MODULE__{
       input_tokens: input,
       output_tokens: output,
+      # When total is 0 (e.g. mid-stream chunks), fall back to calculating from parts.
       total_tokens: if(total == 0, do: input + output, else: total),
       provider_specific: raw
     }
