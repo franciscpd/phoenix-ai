@@ -8,8 +8,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Error, Message, Response, ToolCall}
-  alias PhoenixAI.Providers.OpenAI
+  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall, Usage}
 
   @default_base_url "https://openrouter.ai/api/v1"
 
@@ -31,7 +30,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
     content = Map.get(message, "content")
     finish_reason = Map.get(choice, "finish_reason")
     model = Map.get(body, "model")
-    usage = Map.get(body, "usage", %{})
+    usage = Usage.from_provider(:openrouter, Map.get(body, "usage"))
     tool_calls = parse_tool_calls(Map.get(message, "tool_calls"))
 
     %Response{
@@ -120,9 +119,38 @@ defmodule PhoenixAI.Providers.OpenRouter do
   end
 
   @impl PhoenixAI.Provider
-  def parse_chunk(event_data), do: OpenAI.parse_chunk(event_data)
+  def parse_chunk(%{data: "[DONE]"}), do: %StreamChunk{finish_reason: "stop"}
+
+  def parse_chunk(%{data: data}) do
+    json = Jason.decode!(data)
+    choice = json |> Map.get("choices", []) |> List.first(%{})
+    delta = Map.get(choice, "delta", %{})
+    tool_call_delta = extract_tool_call_delta(Map.get(delta, "tool_calls"))
+    raw_usage = Map.get(json, "usage")
+
+    %StreamChunk{
+      delta: Map.get(delta, "content"),
+      tool_call_delta: tool_call_delta,
+      finish_reason: Map.get(choice, "finish_reason"),
+      usage: if(raw_usage, do: Usage.from_provider(:openrouter, raw_usage), else: nil)
+    }
+  end
 
   # Private helpers
+
+  defp extract_tool_call_delta(nil), do: nil
+  defp extract_tool_call_delta([]), do: nil
+
+  defp extract_tool_call_delta([tc | _]) do
+    function = Map.get(tc, "function", %{})
+
+    %{
+      index: Map.get(tc, "index", 0),
+      id: Map.get(tc, "id"),
+      name: Map.get(function, "name"),
+      arguments: Map.get(function, "arguments", "")
+    }
+  end
 
   defp do_chat(messages, opts) do
     api_key = Keyword.fetch!(opts, :api_key)
