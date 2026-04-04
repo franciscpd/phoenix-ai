@@ -1,192 +1,239 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** Elixir AI Integration Library (inspired by laravel/ai)
-**Researched:** 2026-03-29
-**Reference libraries surveyed:** laravel/ai, Vercel AI SDK v6, LangChain (Python), LangChain (Elixir), ExLLM, ReqLLM, InstructorLite, Jido, SwarmEx, openai_agents
-
----
-
-## laravel/ai API Surface Reference
-
-Understanding laravel/ai's design is essential because PhoenixAI aims for parity adapted to Elixir idioms. Key API patterns:
-
-### Agent Contract System (PHP)
-Agents are classes implementing composable interfaces:
-- `Agent` — base, required
-- `Conversational` — implements `messages()` for context
-- `HasTools` — implements `tools()` returning tool list
-- `HasStructuredOutput` — implements `schema(JsonSchema)` for typed responses
-
-### Inline vs Class Agents
-```php
-// Class agent (reusable, testable)
-$response = (new SalesCoach)->prompt("Analyze this...");
-
-// Inline/anonymous agent (quick, one-off)
-$response = agent(instructions: "You are a coach...")
-    ->prompt("Analyze this...");
-```
-
-### Multi-Agent Patterns (from Anthropic's 5 patterns)
-- **Prompt chaining**: `Pipeline::send()->through([fn, fn, fn])->thenReturn()`
-- **Parallelization**: `Concurrency::run([fn, fn, fn])` → merge results
-- **Routing**: classify with structured output, delegate to specialist agent
-- **Orchestrator-workers**: agent with tools that are themselves agents
-- **Evaluator-optimizer**: generate → evaluate (structured output) → loop until approved
-
-### Conversation Persistence
-- `RemembersConversations` trait — auto-persist to `agent_conversations` table
-- `->forUser($user)` → start new conversation
-- `->continue($conversationId, as: $user)` → resume
+**Domain:** AI Guardrails / Safety Policy Framework (Elixir library milestone)
+**Researched:** 2026-04-04
+**Confidence:** HIGH (cross-referenced NeMo Guardrails, OpenAI Agents SDK, LiteLLM, Guardrails AI, Plug middleware pattern)
 
 ---
 
-## Table Stakes
+## Context: What This Milestone Is
 
-Features users expect. Missing means the library feels incomplete or unusable as a foundation.
+This research covers only the guardrails policy system being added as v0.3.0 to `phoenix_ai`. The library already ships multi-provider dispatch, tool calling, Agent GenServer, streaming, pipelines, and teams. This milestone adds a middleware-chain policy system that runs before (and optionally after) any AI call — enforcing jailbreak detection, content filtering, tool allowlists/denylists, and composable presets.
+
+**Key constraint:** Stateless policies only. Stateful policies (TokenBudget, CostBudget) live in `phoenix_ai_store`.
+
+---
+
+## Feature Landscape
+
+### Table Stakes (Users Expect These)
+
+These are the non-negotiable features users expect from any AI guardrails system. Missing any of these makes the guardrails framework feel incomplete or unusable.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Multi-provider unified API | Every equivalent library has this; developers need provider flexibility | Medium | OpenAI, Anthropic, OpenRouter required at v1; pattern must allow extension |
-| Synchronous text generation | Simplest use case; the "hello world" of the domain | Low | `{:ok, response} = AI.chat(provider, messages)` style |
-| Streaming responses | Users expect real-time token output for chat UIs and long responses | Medium | SSE or chunked; must not block BEAM scheduler; Phoenix Channels integration natural target |
-| Tool/skill calling | Core of "agent" behavior; all major frameworks expose this | High | Must translate Elixir functions to provider JSON schemas; handle tool result loop |
-| Structured output | Typed, validated AI responses; essential for pipelines and reliability | Medium | JSON schema → provider request; response validation; retry on parse failure |
-| Conversation history management | Stateful conversation required for assistants | Medium | Provider-agnostic message list; developer controls persistence |
-| Configurable providers | API keys, model selection, per-call overrides | Low | Mix config + runtime override pattern |
-| Error handling with tuples | Elixir convention; `{:ok, _}` / `{:error, _}` everywhere | Low | Never raise by default; provide bang variants |
-| Provider-agnostic message format | Messages must be normalized across providers | Low | Role + content struct; convert to provider wire format |
+| Policy behaviour with `check/2` | Every guardrails framework (NeMo, OpenAI SDK, LiteLLM, Guardrails AI) defines a first-class policy/validator interface. Developers expect a clear contract to implement custom policies. | LOW | `@callback check(request, opts) :: :ok \| {:halt, violation}` — mirrors Plug's `call/2` halt pattern. The `opts` are NimbleOptions-validated config per policy. |
+| Halt-on-first-violation semantics | Industry standard — NeMo, OpenAI SDK, and LiteLLM all stop the pipeline immediately when a guardrail fires. Fail-fast is the expected default for safety-critical paths. | LOW | Pipeline iterates ordered policy list; first `{:halt, violation}` stops execution and returns `{:error, violation}` to the caller. No partial execution. |
+| Request struct as pipeline context | All production guardrail systems (NeMo, LiteLLM, OpenAI SDK) pass a structured context object — not raw messages — through the chain. Policies need provider, messages, tools, and metadata in one place. | LOW | `%PhoenixAI.Guardrails.Request{}` with fields: `provider`, `model`, `messages`, `tools`, `opts`, `metadata`. Immutable — policies can read, never mutate. |
+| PolicyViolation struct for structured errors | Consumers need machine-readable violation data: which policy fired, what the reason is, severity, and what was detected. Unstructured string errors are unusable in production monitoring. | LOW | `%PhoenixAI.Guardrails.PolicyViolation{}` with `policy`, `reason`, `severity`, `metadata`. Consistent with `PhoenixAI.Error` struct pattern already in library. |
+| Jailbreak detection policy | Jailbreak detection is the single most cited table-stakes guardrail across every framework surveyed. Users attempting prompt injection is a known, common attack vector. | MEDIUM | `JailbreakDetection` policy wrapping a `JailbreakDetector` behaviour. Default implementation uses keyword/phrase matching against known injection patterns. |
+| Content filter policy | Content filtering (pre-call and post-call) is the second most universal guardrail category. AWS Bedrock, Azure AI Content Safety, LiteLLM, and NeMo all provide it. | MEDIUM | `ContentFilter` policy with user-provided `pre_fn` and `post_fn` hooks that receive the request and return `:ok \| {:halt, reason}`. Pure callbacks — no built-in classifier required. |
+| Tool policy (allowlist/denylist) | As agentic AI grows, controlling which tools an agent is permitted to call is table stakes for enterprise deployment. Every enterprise guardrails guide cites tool scoping as a primary control. | LOW | `ToolPolicy` with `mode: :allowlist \| :denylist` and `tools: [atom()]`. Checks `request.tools` list against config. Simple set membership check. |
+| Ordered policy chain executor | All production systems (LiteLLM, NeMo, OpenAI SDK, Guardrails AI) execute policies as an ordered chain. Order determines priority and cost (cheap rules first, expensive LLM-based checks last). | LOW | `PhoenixAI.Guardrails.Pipeline.run(request, policies)` — simple `Enum.reduce_while` with halt on first violation. Returns `{:ok, request} \| {:error, violation}`. |
+| Composable presets | AWS Bedrock, Azure AI Content Safety, and NeMo all expose named preset configurations (balanced, strict, permissive). Developers expect to pick a preset and configure from there, not assemble from scratch. | LOW | `:default`, `:strict`, `:permissive` atoms that resolve to an ordered list of `{policy_module, opts}` tuples. Consumers can use presets as a base and append/prepend their own policies. |
 
----
+### Differentiators (Competitive Advantage)
 
-## Differentiators
-
-Features that set PhoenixAI apart from existing Elixir libraries (ExLLM, ReqLLM, LangChain Elixir) and make it the "laravel/ai of Elixir."
+Features that set this guardrails implementation apart from ad-hoc approaches and make it idiomatic for the Elixir/OTP ecosystem.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Agent behaviour (Elixir behaviour/struct) | Single declarative module with instructions, tools, schema — mirrors laravel/ai class contract but Elixir-idiomatic | Medium | `use PhoenixAI.Agent` behaviour; callbacks: `instructions/0`, `tools/0`, `schema/0`, `on_message/1` |
-| OTP-native parallel agents | `Task.async_stream` / `Task.Supervisor` for fan-out; Supervisors for fault-tolerant pipelines; native to BEAM — no bolted-on concurrency primitives | High | Equivalent to `Concurrency::run()` but idiomatic and supervised |
-| Sequential pipeline DSL | Pipe-based pipeline (`|> then()`) for prompt-chaining workflows | Medium | `AI.Pipeline.run(payload, [&step_a/1, &step_b/1])` — composable, testable steps |
-| Named agent processes (GenServer) | Long-running stateful agents as supervised GenServers with `via_tuple` naming | High | Enables persistent conversation context in process state; natural for chatbots and assistants |
-| Test sandbox / mock provider | `PhoenixAI.TestProvider` that returns scripted responses; no network calls in tests | Medium | ExUnit-friendly; critical gap in current Elixir ecosystem per community discussion |
-| Telemetry integration | `:telemetry` events for every AI call (start, stop, exception, token usage) | Low | Standard Elixir observability; plug into LiveDashboard or OpenTelemetry |
-| Phoenix Channels / LiveView streaming | First-class helpers to push streaming tokens to LiveView assigns or Channel broadcasts | Medium | `stream_to_socket/3`, `stream_to_lv/3`; use Phoenix's existing PubSub |
-| Provider failover | Automatic retry with fallback provider list | Medium | `providers: [:openai, :anthropic]` — try in order; matches laravel/ai's failover feature |
-| Inline vs module agent | Both anonymous `AI.prompt("...", tools: [...])` and `use PhoenixAI.Agent` module patterns | Low | Matches laravel/ai's `agent()` helper vs class agent duality |
+| JailbreakDetector behaviour (extensible) | Instead of hardcoding one jailbreak detection algorithm, expose a `JailbreakDetector` behaviour. Consumers can swap in regex-based, ML-based, or external API detectors without changing the policy. | MEDIUM | `@callback detect(text, opts) :: {:clean, score} \| {:jailbreak, score, patterns_matched}`. The default `KeywordDetector` ships with a curated pattern list. Mirrors the Plug behaviour-based extensibility pattern. |
+| Scope configuration on JailbreakDetection | Different parts of a conversation need different sensitivity. Checking system prompts is different from checking user messages. NeMo distinguishes input/dialog/output rails — we expose `scope: :user \| :system \| :all` to match. | LOW | Filters which messages in `request.messages` are passed to the detector. `:user` checks only `role: "user"` messages. `:all` checks everything. Default: `:user`. |
+| Threshold configuration for detection confidence | All production guardrail systems expose a confidence threshold (0.0–1.0). Allows teams to tune for their risk profile without changing the detector implementation. | LOW | `threshold: float()` in `JailbreakDetection` opts. Score from detector compared against threshold. Values closer to 0.0 are stricter. Default: 0.5. |
+| Pure Elixir, zero ML dependencies | ML-based jailbreak detectors require Bumblebee/Nx, network calls to external APIs, or Python sidecars. The default `KeywordDetector` requires zero extra dependencies — pure Elixir pattern matching. Consumers opt into heavier detectors if needed. | LOW | The behaviour pattern allows consumers to plug in an ML classifier without the library mandating it. This is a library, not an app — zero mandatory heavy deps is a first-class concern. |
+| Integration with existing PhoenixAI.Pipeline | Guardrails should be attachable to the existing sequential Pipeline as a pre-step, not a parallel system. Avoids forcing consumers to restructure existing pipeline code. | MEDIUM | `PhoenixAI.Guardrails.Pipeline.run/2` can be called as the first step of an existing Pipeline. The Request struct bridges the pipeline context cleanly. |
+| Telemetry events for policy violations | Every guardrails firing is an observability event. Without telemetry, violations are invisible in production dashboards. Already part of library's telemetry integration established in v0.1.0. | LOW | Emit `[:phoenix_ai, :guardrails, :violation]` and `[:phoenix_ai, :guardrails, :pass]` events with policy module, severity, and metadata. |
+| NimbleOptions-validated policy config | All existing PhoenixAI components use NimbleOptions. Policy opts should follow the same pattern — compile-time schema validation with readable error messages. | LOW | Each policy module defines an `opts_schema/0` function returning a NimbleOptions spec. `Pipeline.run/2` validates opts before executing. |
 
----
+### Anti-Features (Commonly Requested, Often Problematic)
 
-## Anti-Features
-
-Features to explicitly NOT build in v1 (and likely ever for the core library).
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Built-in database persistence | Couples library to Ecto/Postgres; kills non-Phoenix adoption; laravel/ai does this but it's the wrong call for Elixir | Document a persistence callback protocol; let consumers implement with Ecto, ETS, Redis, or Mnesia |
-| Web UI / LiveView components | Out of scope in PROJECT.md; not a UI library | Document integration patterns; let consumers own the UI |
-| Embeddings / vector search | Separate concern per PROJECT.md; would balloon scope | Companion library later; recommend Pgvector/Qdrant integration separately |
-| Image / audio generation | Multimodal out of scope for v1; adds provider complexity with low value for the core use cases | Leave for v2+ feature flag; focus on text agents first |
-| Built-in RAG pipeline | Complex, domain-specific; ExEmbeddings or Pgvector ecosystem better placed | Document RAG as a use case pattern using the pipeline primitive |
-| Provider-specific feature wrappers | Extended thinking, web search, prompt caching — provider-specific, unstable APIs | Allow pass-through of raw provider options; don't abstract leaky features |
-| Python subprocess / Nx.Serving | Local model inference is a separate BEAM concern | Bumblebee ecosystem handles this; PhoenixAI targets hosted API providers |
-| MCP server hosting | laravel/ai has Laravel MCP, but that's a separate product | Out of scope; MCP client support could be v2 tool source |
-| Fine-tuning / training | Inference-only library | Not applicable |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Built-in ML-based jailbreak classifier | Developers want high-accuracy jailbreak detection out of the box; ML models outperform keyword matching. | Mandates Bumblebee/Nx or external API as a hard dependency on the core library. Kills adoption for simple use cases. Adds 100+ MB of model weights. | Expose `JailbreakDetector` behaviour. Publish `phoenix_ai_ml_guards` as a separate optional library that implements the behaviour using Bumblebee. Document the pattern. |
+| Post-call output guardrails (built-in) | NeMo, OpenAI SDK, and AWS Bedrock all have output rails. Checking AI responses for policy compliance is a real need. | Requires intercepting the response after the LLM call — which means the guardrails pipeline needs to be aware of both request and response lifecycles, significantly complicating the executor and the policy behaviour signature. | Scope this milestone to input (pre-call) guardrails only. Document that `ContentFilter`'s `post_fn` hook gives consumers a path to output filtering via the response callback. Output rails as a v0.4.0 item. |
+| Rate limiting policy | Token budget and call rate limits are natural guardrails that developers expect to configure alongside jailbreak detection. | Stateful — requires a counter store (ETS, Redis, or DB) with TTL semantics. The PRD explicitly puts TokenBudget and CostBudget in `phoenix_ai_store`. Stateful policies in a stateless library create hidden state problems. | Document that stateful policies live in `phoenix_ai_store`. Provide a `Policy` behaviour that `phoenix_ai_store` implements for its rate-limiting policies, so the same executor works. |
+| PII detection/masking built-in | Masking emails, phone numbers, and SSNs before sending to LLMs is a real enterprise need and a common guardrails feature (AWS Bedrock, Azure). | Regex-based PII detection has significant false-positive/false-negative rates and varies heavily by locale. A built-in implementation would create a false sense of security. | `ContentFilter` with a user-provided `pre_fn` is the correct primitive. Consumers can plug in a proper PII library (e.g., a NIF or external API) via the callback. |
+| Guardrails DSL / configuration language | NeMo uses Colang — a custom DSL for defining guardrails. Developers familiar with NeMo might expect a declarative config format. | Colang exists because Python lacks composable module patterns. Elixir behaviours + keyword list config are already declarative and composable. A custom DSL adds parsing overhead and a new language to learn. | Plain Elixir module + NimbleOptions config IS the DSL. Keep it idiomatic. |
+| Automatic retry on violation | When a guardrail fires, some frameworks (Guardrails AI's `on_fail: :fix`) attempt to rewrite the input and retry. | Retry-on-violation hides failures from the caller and can create infinite loops. It also conflates content rewriting (a different concern) with policy enforcement. | Return `{:error, %PolicyViolation{}}` and let the caller decide. If retry is needed, the caller can implement it explicitly with their own logic. |
 
 ---
 
 ## Feature Dependencies
 
-Understanding build order — later features require earlier ones to be stable.
-
 ```
-Provider adapter behaviour
-  └── Unified message format (Message struct)
-        ├── Synchronous chat (AI.chat/3)
-        │     ├── Streaming (AI.stream/3)
-        │     ├── Tool calling loop (requires chat + message format)
-        │     │     └── Agent behaviour (requires tools + instructions + chat)
-        │     │           ├── Sequential pipeline (requires agent as unit)
-        │     │           └── Parallel agents (requires agent as unit + Task supervision)
-        │     └── Structured output (requires chat + schema validation)
-        │           └── Routing pattern (requires structured output + agent dispatch)
-        └── Conversation history (requires message format)
-              └── Named agent GenServer (requires conv. history + agent behaviour)
+PhoenixAI.Guardrails.Request (struct)
+  └──required by──> PhoenixAI.Policy (behaviour)
+                        └──required by──> PhoenixAI.Guardrails.Pipeline (executor)
+                                            ├──required by──> JailbreakDetection policy
+                                            ├──required by──> ContentFilter policy
+                                            └──required by──> ToolPolicy policy
 
-Cross-cutting (can be added at any layer):
-  Telemetry → wraps any operation
-  Test sandbox → mocks provider adapter
-  Phoenix streaming helpers → wraps streaming + channel/socket
-  Provider failover → wraps provider adapter call
+PhoenixAI.Guardrails.PolicyViolation (struct)
+  └──required by──> PhoenixAI.Policy (halt return type)
+
+PhoenixAI.Guardrails.JailbreakDetector (behaviour)
+  └──required by──> PhoenixAI.Guardrails.Detectors.KeywordDetector (default impl)
+                        └──required by──> JailbreakDetection policy (default detector)
+
+JailbreakDetection + ContentFilter + ToolPolicy (policies)
+  └──all required before──> Presets (:default, :strict, :permissive)
+
+PhoenixAI.Guardrails.Pipeline (executor)
+  └──integrates with──> PhoenixAI.Agent (pre-call hook site)
+  └──integrates with──> PhoenixAI.Pipeline (first step pattern)
 ```
+
+### Dependency Notes
+
+- **Request struct before Policy behaviour:** `check/2` receives a `Request.t()` — the struct definition must be stable before any policy can be implemented or tested.
+- **PolicyViolation before Pipeline:** The executor's halt branch returns `{:error, %PolicyViolation{}}` — the struct must exist before the executor can compile.
+- **JailbreakDetector before JailbreakDetection:** The policy wraps the detector behaviour; the detector contract must be defined before the policy can delegate to it.
+- **All three policies before Presets:** Presets reference policy modules by atom — all three must compile successfully before preset resolution works.
+- **Executor before Agent integration:** The `PhoenixAI.Agent` integration is a post-milestone concern (wiring guardrails into the Agent GenServer lifecycle). The executor must be stable as a standalone first.
 
 ---
 
-## Ecosystem Gap Analysis
+## MVP Definition
 
-Comparing existing Elixir libraries against the laravel/ai feature surface:
+### Launch With (v0.3.0)
 
-| Feature | laravel/ai | ExLLM | ReqLLM | LangChain (Elixir) | Jido | PhoenixAI Target |
-|---------|-----------|-------|--------|---------------------|------|-----------------|
-| Multi-provider | Yes (10+) | Yes (13+) | Yes (18+) | Partial | No | Yes (3 at v1) |
-| Streaming | Yes | Yes | Yes | Partial | No | Yes |
-| Tool calling | Yes | Yes | Yes | Yes | Yes | Yes |
-| Structured output | Yes | Via Instructor | Yes | Partial | No | Yes (built-in) |
-| Agent behaviour/class | Yes (class) | No | No | Partial | Yes (GenServer) | Yes (behaviour) |
-| Sequential pipeline DSL | Yes (Pipeline) | No | No | Chains | No | Yes |
-| Parallel agents | Yes (Concurrency) | No | No | No | Partial | Yes (OTP-native) |
-| Named agent (GenServer) | No (PHP) | No | No | No | Yes | Yes |
-| Built-in persistence | Yes (Ecto) | No | No | No | No | No (by design) |
-| Telemetry | Yes (events) | No | Partial | No | No | Yes |
-| Test sandbox | Yes | No | No | No | No | Yes |
-| Failover | Yes | No | No | No | No | Yes |
-| Phoenix streaming helpers | N/A | No | No | No | No | Yes |
+Minimum viable guardrails system — everything below must ship together to be coherent.
 
-**Key insight:** No existing Elixir library combines the full laravel/ai feature surface (agents + tools + structured output + pipelines + parallelism) with Elixir/OTP idioms. The gap is real and the market exists.
+- [x] `%PhoenixAI.Guardrails.Request{}` struct — pipeline context carrier
+- [x] `%PhoenixAI.Guardrails.PolicyViolation{}` struct — structured halt reason
+- [x] `PhoenixAI.Policy` behaviour — `check/2` callback contract
+- [x] `PhoenixAI.Guardrails.Pipeline` executor — ordered chain with halt-on-first-violation
+- [x] `PhoenixAI.Guardrails.JailbreakDetector` behaviour — extensible detector contract
+- [x] `PhoenixAI.Guardrails.Detectors.KeywordDetector` — default keyword/phrase heuristic
+- [x] `PhoenixAI.Guardrails.Policies.JailbreakDetection` — wraps detector with scope/threshold config
+- [x] `PhoenixAI.Guardrails.Policies.ContentFilter` — pre/post user-provided function hooks
+- [x] `PhoenixAI.Guardrails.Policies.ToolPolicy` — allowlist/denylist for tool names
+- [x] `PhoenixAI.Guardrails.Presets` — `:default`, `:strict`, `:permissive` resolvers
+
+### Add After Validation (v0.3.x)
+
+- [ ] Agent integration — wire `Guardrails.Pipeline.run/2` into `PhoenixAI.Agent` as an optional pre-call hook — adds `guardrails:` opt to `start_link/1`
+- [ ] Telemetry events for pass/violation — `[:phoenix_ai, :guardrails, :violation]`
+- [ ] `opts_schema/0` on each policy for NimbleOptions validation
+
+### Future Consideration (v0.4+)
+
+- [ ] Output rails — post-call response inspection via a second `check_output/2` callback on the policy behaviour
+- [ ] `phoenix_ai_ml_guards` companion library — implements `JailbreakDetector` with a Bumblebee-based model
+- [ ] Custom preset builder macro — `use PhoenixAI.Guardrails.Preset, base: :strict` to extend a preset
 
 ---
 
-## MVP Recommendation
+## Feature Prioritization Matrix
 
-**Prioritize (v1 — must ship together for usefulness):**
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Request + PolicyViolation structs | HIGH | LOW | P1 |
+| Policy behaviour (`check/2`) | HIGH | LOW | P1 |
+| Pipeline executor (ordered chain, halt) | HIGH | LOW | P1 |
+| JailbreakDetector behaviour | HIGH | LOW | P1 |
+| KeywordDetector (default impl) | HIGH | LOW | P1 |
+| JailbreakDetection policy | HIGH | MEDIUM | P1 |
+| ContentFilter policy | HIGH | LOW | P1 |
+| ToolPolicy | HIGH | LOW | P1 |
+| Presets (:default, :strict, :permissive) | MEDIUM | LOW | P1 |
+| Agent integration (guardrails in GenServer) | HIGH | MEDIUM | P2 |
+| Telemetry events | MEDIUM | LOW | P2 |
+| NimbleOptions validation on policy opts | MEDIUM | LOW | P2 |
+| Output rails | HIGH | HIGH | P3 |
+| ML-based jailbreak detector | MEDIUM | HIGH | P3 (separate lib) |
 
-1. Provider adapter behaviour + OpenAI, Anthropic, OpenRouter implementations
-2. Unified Message struct + normalization
-3. Synchronous chat (`AI.chat/3`)
-4. Tool/skill calling with automatic loop
-5. Structured output via JSON schema
-6. `use PhoenixAI.Agent` behaviour (instructions + tools + schema)
-7. Streaming (`AI.stream/3`) + Phoenix helpers
-8. Test sandbox provider
-9. Telemetry events
+**Priority key:**
+- P1: Must have for v0.3.0 launch — this is the entire point of the milestone
+- P2: Should have, add in v0.3.x patch
+- P3: Nice to have / future milestone / companion library
 
-**Second wave (v1.x — not blocking):**
+---
 
-10. Sequential pipeline DSL
-11. Parallel agent execution helpers
-12. Named agent GenServer + supervision
-13. Provider failover
-14. Conversation history protocol (callbacks, no persistence)
-15. Inline/anonymous agent helper
+## Competitor Feature Analysis
 
-**Defer:**
-- Image/audio/embeddings: insufficient value for v1 core use cases
-- MCP: v2
-- RAG: companion library
-- Built-in persistence: never (anti-feature)
+| Feature | NeMo Guardrails | OpenAI Agents SDK | LiteLLM | Guardrails AI | PhoenixAI v0.3.0 |
+|---------|-----------------|-------------------|---------|---------------|------------------|
+| Policy/guard interface | Colang + Python callbacks | `@input_guardrail` decorator | `CustomGuardrail` class with hooks | `Validator` class | `PhoenixAI.Policy` behaviour |
+| Halt semantics | Yes — input rail rejection stops pipeline | Yes — tripwire raises exception | Yes — pre-call hook can block | Yes — `on_fail: :exception` | Yes — `{:halt, violation}` stops chain |
+| Execution model | Ordered rail stages (input → dialog → retrieval → output) | Parallel or blocking | Hook points (pre\_call, post\_call, stream) | Sequential validator chain | Ordered `Enum.reduce_while` |
+| Jailbreak detection | Yes — built-in + self-check | Via input guardrail + LLM classifier | Via `LlamaGuard`, `PromptShield` | Via validator hub | `JailbreakDetection` policy + `KeywordDetector` |
+| Content filtering | Yes — output rail | Yes — output guardrail | Yes — `litellm_content_filter` | Yes — toxicity validator | `ContentFilter` with `pre_fn`/`post_fn` |
+| Tool policy | No explicit tool allowlist | Tool scoping via agent config | Via custom guardrail | No | `ToolPolicy` allowlist/denylist |
+| Presets | No explicit presets | No | No | No | `:default`, `:strict`, `:permissive` |
+| Extensible detector | Via custom action Python | Custom class | Custom class | Custom validator | `JailbreakDetector` behaviour |
+| Idiomatic language | Python + Colang DSL | Python decorator | Python class | Python class | Elixir behaviour + keyword config |
+| Stateful policies | Yes (dialog state) | No | Yes (rate limits) | No | Deferred to `phoenix_ai_store` |
+| Dependencies | Heavy (Python + optional LLM) | Python SDK | Python + optional models | Python | Pure Elixir — zero new deps |
+
+**Key insight:** No existing Elixir library provides a structured guardrails policy system. The design is informed by what works across Python frameworks but adapted to Elixir idioms: behaviours replace abstract classes, Plug-style halt semantics replace exceptions, and `{:ok, _} | {:error, _}` tuples replace raising.
+
+---
+
+## Behavior Patterns: Expected Semantics
+
+### Policy `check/2` contract
+
+```elixir
+@callback check(
+  request :: PhoenixAI.Guardrails.Request.t(),
+  opts :: keyword()
+) :: :ok | {:halt, PhoenixAI.Guardrails.PolicyViolation.t()}
+```
+
+- `:ok` — policy passed, continue to next policy in chain
+- `{:halt, violation}` — policy failed, stop chain, return `{:error, violation}` to caller
+- Policies must not raise — they return structured tuples (consistent with library convention)
+- Policies are stateless — no process state, no ETS, no side effects beyond the return value
+
+### Pipeline executor contract
+
+```elixir
+@spec run(
+  request :: PhoenixAI.Guardrails.Request.t(),
+  policies :: [{module(), keyword()}]
+) :: {:ok, PhoenixAI.Guardrails.Request.t()} | {:error, PhoenixAI.Guardrails.PolicyViolation.t()}
+```
+
+- Receives a list of `{PolicyModule, opts}` tuples — order is significant
+- Returns `{:ok, request}` when all policies pass — request is unchanged (policies are read-only)
+- Returns `{:error, violation}` on first `{:halt, violation}` — short-circuits remaining policies
+- Cheap policies (keyword matching) should precede expensive policies (LLM classifiers) in the list
+
+### Preset resolution
+
+```elixir
+PhoenixAI.Guardrails.Presets.resolve(:strict)
+# => [
+#   {PhoenixAI.Guardrails.Policies.JailbreakDetection, [threshold: 0.3, scope: :all]},
+#   {PhoenixAI.Guardrails.Policies.ToolPolicy, [mode: :denylist, tools: []]},
+#   {PhoenixAI.Guardrails.Policies.ContentFilter, [pre_fn: nil, post_fn: nil]}
+# ]
+```
+
+- Presets return `[{module, opts}]` lists, not opaque objects — consumers can inspect and override
+- `:default` — jailbreak detection (user messages, threshold 0.5) + tool policy (no-op / passthrough)
+- `:strict` — jailbreak detection (all messages, threshold 0.3) + tool policy (allowlist mode, empty) + content filter (user hooks)
+- `:permissive` — minimal jailbreak detection (user messages, threshold 0.8) — almost no blocking
 
 ---
 
 ## Sources
 
-- [laravel/ai GitHub](https://github.com/laravel/ai) — MEDIUM confidence (fetched, v0.4.2 as of research date)
-- [Laravel AI SDK Docs (12.x)](https://laravel.com/docs/12.x/ai-sdk) — HIGH confidence (official docs)
-- [Building Multi-Agent Workflows with Laravel AI SDK](https://laravel.com/blog/building-multi-agent-workflows-with-the-laravel-ai-sdk) — HIGH confidence (official blog)
-- [Vercel AI SDK Introduction](https://ai-sdk.dev/docs/introduction) — HIGH confidence (official docs, v6)
-- [ExLLM Documentation](https://hexdocs.pm/ex_llm/ExLLM.html) — MEDIUM confidence (hexdocs, deprecated per README)
-- [ReqLLM GitHub](https://github.com/agentjido/req_llm) — MEDIUM confidence (active library, fetched)
-- [awesome-ml-gen-ai-elixir](https://github.com/georgeguimaraes/awesome-ml-gen-ai-elixir) — MEDIUM confidence (community-maintained)
-- [Elixir Forum: Is anyone working on AI Agents in Elixir?](https://elixirforum.com/t/is-anyone-working-on-ai-agents-in-elixir/69989) — MEDIUM confidence (community discussion, current)
-- [openai_agents for Elixir](https://hexdocs.pm/openai_agents/) — LOW confidence (v0.1.2, minimal docs available)
-- [InstructorLite](https://github.com/martosaur/instructor_lite) — MEDIUM confidence (active, hexdocs)
-- [Jido agent framework](https://github.com/agentjido/jido) — MEDIUM confidence (active, GitHub fetched)
+- [NeMo Guardrails documentation](https://docs.nvidia.com/nemo/guardrails/latest/index.html) — HIGH confidence (official NVIDIA docs)
+- [OpenAI Agents SDK Guardrails](https://openai.github.io/openai-agents-python/guardrails/) — HIGH confidence (official OpenAI docs)
+- [LiteLLM Custom Guardrail docs](https://docs.litellm.ai/docs/proxy/guardrails/custom_guardrail) — MEDIUM confidence (official LiteLLM docs)
+- [Guardrails AI introduction](https://guardrailsai.com/docs) — MEDIUM confidence (official Guardrails AI docs)
+- [LangChain Guardrails](https://docs.langchain.com/oss/python/langchain/guardrails) — MEDIUM confidence (official LangChain docs)
+- [Plug halt semantics](https://hexdocs.pm/plug/Plug.Conn.html) — HIGH confidence (official Hex docs)
+- [Plug behaviour](https://hexdocs.pm/plug/Plug.html) — HIGH confidence (official Hex docs)
+- [AI Guardrails Production Implementation Guide 2026](https://iterathon.tech/blog/ai-guardrails-production-implementation-guide-2026) — LOW confidence (blog, WebSearch only)
+- [Practical AI Guardrails: Types, Tools & Detection Methods](https://www.tredence.com/blog/ai-guardrails-types-tools-detection) — LOW confidence (blog, WebSearch only)
+- [Guardrails for AI Agents — Weights & Biases](https://wandb.ai/site/articles/guardrails-for-ai-agents/) — LOW confidence (blog, WebSearch only)
+- [Agentic AI Safety Playbook 2025](https://dextralabs.com/blog/agentic-ai-safety-playbook-guardrails-permissions-auditability/) — LOW confidence (blog, WebSearch only)
+
+---
+
+*Feature research for: AI Guardrails policy system (phoenix_ai v0.3.0)*
+*Researched: 2026-04-04*

@@ -1,535 +1,616 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Elixir AI Integration Library (PhoenixAI)
-**Researched:** 2026-03-29
-**Reference:** laravel/ai, LangChain.ex, ex_llm, Alloy, ReqLLM, Jido
-
----
-
-## Recommended Architecture
-
-PhoenixAI should be organized as a layered library where each layer has a single responsibility and communicates only with the layers directly adjacent to it. The layers from bottom to top: HTTP transport, provider adapters, core data model, agent runtime, and public API surface.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      PUBLIC API LAYER                        │
-│              PhoenixAI  (unified entry point)                │
-│     .chat/3   .agent/2   .pipeline/2   .stream/3            │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                    AGENT RUNTIME LAYER                       │
-│   PhoenixAI.Agent (GenServer)  PhoenixAI.Pipeline           │
-│   PhoenixAI.Team (Task.Supervisor)  conversation state       │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  CORE DATA MODEL LAYER                       │
-│   Message  Conversation  ToolCall  ToolResult  Response      │
-│   Tool (behaviour)   Schema (structured output)              │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  PROVIDER ADAPTER LAYER                      │
-│   PhoenixAI.Provider (behaviour)                             │
-│   Providers.OpenAI   Providers.Anthropic   Providers.OpenRouter │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                   HTTP TRANSPORT LAYER                       │
-│   Req (standard requests)   Finch (SSE streaming)            │
-└─────────────────────────────────────────────────────────────┘
-```
+**Domain:** Elixir AI Library — Middleware-Chain Guardrails Policy System
+**Researched:** 2026-04-04
+**Confidence:** HIGH
 
 ---
 
-## Component Boundaries
+## Context: Adding Guardrails to an Existing Library
 
-### Component 1: Provider Behaviour (`PhoenixAI.Provider`)
+This document focuses on the guardrails integration architecture for v0.3.0. The base
+architecture (layered provider/adapter/agent/pipeline structure) is already established and
+validated. The question here is: how does a new policy pipeline layer wire into `chat/2`,
+`stream/2`, and the `Agent`, without breaking existing call sites?
 
-Single responsibility: translate between PhoenixAI's canonical data model and each provider's HTTP API.
+---
 
-| Callback | Purpose |
-|----------|---------|
-| `chat/2` | Send messages, receive response |
-| `stream/3` | Send messages, stream response chunks via callback |
-| `format_tools/1` | Serialize Tool structs to provider's schema format |
-| `parse_response/1` | Normalize provider HTTP response to canonical Response struct |
-| `parse_chunk/1` | Normalize SSE chunk to canonical token or tool-call event |
+## Standard Architecture
 
-**Communicates with:** HTTP transport layer (Req/Finch), Core data model layer (receives/returns structs)
+### System Overview — Guardrails as a Pre-Call Gate
 
-**Does NOT know about:** Agent state, pipelines, conversation history, OTP processes
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       CONSUMER CALL SITE                         │
+│  PhoenixAI.chat/2  PhoenixAI.Agent.prompt/3  PhoenixAI.stream/3 │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │ opts: [guardrails: [policies: [...]]]
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                 GUARDRAILS PIPELINE (pre-call gate)              │
+│                                                                  │
+│  Guardrails.Pipeline.run(request, policies)                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ [JailbreakDetection, ContentFilter, ToolPolicy, ...]      │   │
+│  │  each implements Policy behaviour: check(request, opts)   │   │
+│  │  returns {:ok, request} | {:halt, %PolicyViolation{}}     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │ {:ok, _} continues  {:halt, _} returns early
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                   PROVIDER ADAPTER LAYER                         │
+│   Providers.OpenAI  Providers.Anthropic  Providers.OpenRouter    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Guardrails runs as a pure, synchronous gate between the consumer call site and the
+provider adapter. It does not wrap the provider in a process; it is a function call that
+returns early on violation or passes through on success.
+
+---
+
+### Component Responsibilities — New vs. Existing
+
+| Component | New/Existing | Responsibility |
+|-----------|-------------|----------------|
+| `Guardrails.Policy` (behaviour) | NEW | Contract every policy module must implement |
+| `Guardrails.Request` (struct) | NEW | Context struct flowing through the policy chain |
+| `Guardrails.PolicyViolation` (struct) | NEW | Structured error returned on halt |
+| `Guardrails.Pipeline` | NEW | Executes ordered policy list with halt-on-first semantics |
+| `Guardrails.Presets` | NEW | Named policy lists (`:default`, `:strict`, `:permissive`) |
+| `Policies.JailbreakDetection` | NEW | Wraps `JailbreakDetector` behaviour |
+| `Policies.ContentFilter` | NEW | Pre/post user-provided function hooks |
+| `Policies.ToolPolicy` | NEW | Allowlist/denylist for tool calls |
+| `JailbreakDetector` (behaviour) | NEW | Contract for jailbreak detection implementations |
+| `JailbreakDetector.Default` | NEW | Keyword heuristic implementation |
+| `Provider.chat/2` | EXISTING — unchanged | Receives messages only after guardrails pass |
+| `Provider.stream/3` | EXISTING — unchanged | Same; guardrails run before stream opens |
+| `Agent.handle_call/3` | MODIFIED | Runs guardrails before dispatching to provider |
+
+---
+
+## Recommended Project Structure
+
+```
+lib/
+└── phoenix_ai/
+    └── guardrails/
+        ├── policy.ex                   # @behaviour with check/2 callback
+        ├── request.ex                  # %Request{} struct — pipeline context
+        ├── policy_violation.ex         # %PolicyViolation{} struct
+        ├── pipeline.ex                 # run/2 — Enum.reduce_while executor
+        ├── presets.ex                  # Named policy lists
+        ├── jailbreak_detector.ex       # @behaviour for detector implementations
+        ├── jailbreak_detector/
+        │   └── default.ex             # Keyword heuristics implementation
+        └── policies/
+            ├── jailbreak_detection.ex  # Policy wrapping JailbreakDetector
+            ├── content_filter.ex       # Pre/post hook policy
+            └── tool_policy.ex          # Allowlist/denylist policy
+```
+
+### Structure Rationale
+
+- **`guardrails/` as a namespace:** All guardrail modules live under one namespace so
+  the surface area is clear and the entire subsystem can be understood at a glance.
+- **`policies/` subfolder:** Concrete policy implementations are separated from
+  infrastructure (`policy.ex`, `pipeline.ex`), allowing new policies to be added without
+  touching core files.
+- **`jailbreak_detector/` subfolder:** The `JailbreakDetector` behaviour has its own
+  subfolder for multiple implementations (default keyword, future ML-based, etc.) without
+  cluttering the policies folder.
+- **`presets.ex` as a module function:** Rather than a macro DSL, presets are plain
+  functions returning keyword lists — zero magic, easy to inspect and override.
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: `@behaviour` with `{:ok, request} | {:halt, violation}` Return Contract
+
+**What:** Every policy module implements `PhoenixAI.Guardrails.Policy` by defining a
+single `check/2` callback. The callback receives a `Request` struct and a keyword options
+list, and returns either `{:ok, %Request{}}` (continue) or `{:halt, %PolicyViolation{}}`
+(stop the chain).
+
+**When to use:** This is the only extension point for new policies. Use it for any pre-call
+validation that should block the provider call.
+
+**Trade-offs:**
+- Pros: Simple contract, compile-time warnings if callback not implemented, no GenServer
+  needed, pure functions are easy to test in isolation.
+- Cons: Cannot modify the request in-place and continue (no "transform and continue" path)
+  — but this is intentional; policies that modify requests become difficult to reason about.
+
+**Example:**
 
 ```elixir
-defmodule PhoenixAI.Provider do
-  @callback chat(messages :: [Message.t()], opts :: keyword()) ::
-              {:ok, Response.t()} | {:error, term()}
+defmodule PhoenixAI.Guardrails.Policy do
+  @moduledoc "Behaviour for all guardrail policies."
 
-  @callback stream(messages :: [Message.t()], callback :: (chunk -> any()), opts :: keyword()) ::
-              {:ok, Response.t()} | {:error, term()}
-
-  @callback format_tools(tools :: [Tool.t()]) :: [map()]
+  @callback check(
+              request :: PhoenixAI.Guardrails.Request.t(),
+              opts :: keyword()
+            ) ::
+              {:ok, PhoenixAI.Guardrails.Request.t()}
+              | {:halt, PhoenixAI.Guardrails.PolicyViolation.t()}
 end
 ```
 
-**Confidence:** HIGH — this is the canonical Elixir pattern (Swoosh, ReqLLM, ex_llm all validate it). Sources: [Swoosh adapter pattern](https://www.djm.org.uk/posts/writing-extensible-elixir-with-behaviours-adapters-pluggable-backends/), [ReqLLM provider behaviour](https://hexdocs.pm/req_llm/overview.html)
+Note: `@callback` not `@spec` because this is a behaviour contract, not a type spec on a
+concrete function. Each implementing module also declares `@behaviour PhoenixAI.Guardrails.Policy`
+and uses `@impl true` on its `check/2`.
 
 ---
 
-### Component 2: Core Data Model
+### Pattern 2: `Enum.reduce_while` Pipeline — Halt-on-First-Violation
 
-Single responsibility: define the canonical structs that flow through the system. All provider adapters speak this language; no layer bypasses these types.
+**What:** `Guardrails.Pipeline.run/2` iterates the ordered list of `{module, opts}` tuples
+using `Enum.reduce_while`. The accumulator is `{:ok, request}`. On the first
+`{:halt, violation}`, `reduce_while` stops and returns `{:halt, violation}` to the caller.
+All policies after the halted one are skipped.
 
-| Struct | Fields | Purpose |
-|--------|--------|---------|
-| `Message` | role, content, tool_call_id | Single turn in a conversation |
-| `Conversation` | id, messages, metadata | Ordered list of messages with context |
-| `ToolCall` | id, name, arguments | LLM's intent to invoke a tool |
-| `ToolResult` | tool_call_id, content, error | Output of executing a tool |
-| `Response` | content, tool_calls, usage, finish_reason | Canonical provider response |
-| `StreamChunk` | delta, tool_call_delta, finish_reason | Single SSE event |
+**When to use:** This is the core execution engine. Do not replace with `Task.async_stream`
+— policies must run serially and in order (each may depend on previous policy state or
+request annotations).
 
-**Communicates with:** All layers (these are the data bus)
+**Trade-offs:**
+- Pros: Idiomatic Elixir, consistent with existing `Pipeline.run/3`, no OTP overhead.
+- Cons: No parallel policy execution (acceptable — policy checks are fast, sub-millisecond
+  for keyword heuristics; if an ML-based policy is added later it becomes its own opt-in
+  strategy).
 
-**Does NOT know about:** HTTP transport, provider specifics, OTP processes
-
----
-
-### Component 3: Tool Behaviour (`PhoenixAI.Tool`)
-
-Single responsibility: define the interface that callable functions must implement so the agent loop can discover, serialize, and execute them.
+**Example:**
 
 ```elixir
-defmodule PhoenixAI.Tool do
-  @callback name() :: String.t()
-  @callback description() :: String.t()
-  @callback parameters_schema() :: map()
-  @callback execute(params :: map(), context :: map()) ::
-              {:ok, term()} | {:error, term()}
-end
-```
+defmodule PhoenixAI.Guardrails.Pipeline do
+  alias PhoenixAI.Guardrails.{PolicyViolation, Request}
 
-Tools are plain modules implementing this behaviour — no OTP, no GenServer. They are pure functions. The agent runtime dispatches to them; they do not know about the agent.
+  @spec run(Request.t(), [{module(), keyword()}]) ::
+          {:ok, Request.t()} | {:halt, PolicyViolation.t()}
+  def run(%Request{} = request, policies) do
+    start_time = System.monotonic_time()
 
-**Communicates with:** Agent runtime layer (invoked by it), Core data model (returns results that become ToolResult structs)
+    result =
+      Enum.reduce_while(policies, {:ok, request}, fn {policy_mod, opts}, {:ok, req} ->
+        case policy_mod.check(req, opts) do
+          {:ok, updated_req} -> {:cont, {:ok, updated_req}}
+          {:halt, violation} -> {:halt, {:halt, violation}}
+        end
+      end)
 
-**Confidence:** HIGH — matches laravel/ai Tool contract and Jido Actions pattern. Sources: [Jido architecture](https://github.com/agentjido/jido), [Laravel AI tools](https://laravel.com/docs/12.x/ai-sdk)
+    duration = System.monotonic_time() - start_time
+    status = if match?({:ok, _}, result), do: :ok, else: :halted
 
----
-
-### Component 4: Agent Runtime (`PhoenixAI.Agent`)
-
-Single responsibility: run the completion-tool-call loop to completion, maintaining conversation state within a single process.
-
-The agent is a GenServer that owns one conversation's state. It:
-1. Holds the current `Conversation` in its state
-2. On `prompt/2`, adds the user message, calls the provider
-3. If the response contains tool calls, dispatches each via `Tool.execute/2`, collects `ToolResult` structs, appends them, and loops back to the provider
-4. When finish_reason is "stop", returns the final response to the caller
-5. Can be started under a `DynamicSupervisor` for per-session isolation
-
-```elixir
-# Usage pattern
-{:ok, pid} = PhoenixAI.Agent.start_link(
-  provider: PhoenixAI.Providers.Anthropic,
-  model: "claude-3-5-sonnet-20241022",
-  system: "You are a helpful assistant.",
-  tools: [MyApp.Tools.Search, MyApp.Tools.Calculator]
-)
-
-{:ok, response} = PhoenixAI.Agent.prompt(pid, "What is the weather in Lisbon?")
-```
-
-**OTP role:** GenServer. Each agent is an isolated process. Crashes are isolated. Supervised by `DynamicSupervisor` at the library or application level.
-
-**Communicates with:** Provider adapter layer (makes chat/stream calls), Tool behaviour implementations (dispatches tool calls), Core data model (reads/writes Message, ToolCall, ToolResult structs)
-
-**Does NOT know about:** Pipeline, Team, public API caller's identity
-
-**Confidence:** HIGH — validated by Alloy, Jido AgentServer, and multiple 2025 Elixir AI tutorials. Sources: [Alloy forum post](https://elixirforum.com/t/alloy-a-minimal-otp-native-ai-agent-engine-for-elixir/74464), [Jido GitHub](https://github.com/agentjido/jido)
-
----
-
-### Component 5: Streaming Transport
-
-Single responsibility: establish a Finch HTTP connection to an SSE endpoint and emit parsed chunks to a caller-supplied callback or process PID.
-
-**Key decision:** Use Finch directly for streaming, not Req. Req's plugin architecture does not support the long-running, stateful connections required for Server-Sent Events. This is validated by both ReqLLM 1.0 and Fly.io's streaming guide.
-
-```elixir
-# Internal — not public API. Used by provider adapters.
-defmodule PhoenixAI.HTTP.Stream do
-  def stream(url, headers, body, on_chunk) do
-    Finch.build(:post, url, headers, body)
-    |> Finch.stream(PhoenixAI.Finch, fn
-      {:status, status}, acc -> ...
-      {:headers, headers}, acc -> ...
-      {:data, data}, acc ->
-        data
-        |> parse_sse_lines()
-        |> Enum.each(on_chunk)
-        acc
-    end)
-  end
-end
-```
-
-**Communicates with:** Provider adapters (called by them), Agent runtime (stream chunks are forwarded to calling process via `send/2` or callback)
-
-**Confidence:** HIGH — explicitly validated by ReqLLM and Fly.io. Sources: [ReqLLM 1.0](https://jido.run/blog/announcing-req_llm-1_0), [Fly.io streaming](https://fly.io/phoenix-files/streaming-openai-responses/)
-
----
-
-### Component 6: Pipeline Orchestrator (`PhoenixAI.Pipeline`)
-
-Single responsibility: execute a sequence of steps where each step's output becomes the next step's input. Steps can be agent invocations, plain function calls, or tool executions.
-
-This is a pure data transformation — no GenServer needed for the pipeline itself. It uses the pipe operator pattern (`|>`) and `Enum.reduce` with `{:ok, state}` / `{:error, reason}` railway.
-
-```elixir
-defmodule PhoenixAI.Pipeline do
-  def run(steps, initial_input, opts \\ []) do
-    Enum.reduce_while(steps, {:ok, initial_input}, fn step, {:ok, acc} ->
-      case step.(acc) do
-        {:ok, result} -> {:cont, {:ok, result}}
-        {:error, _} = err -> {:halt, err}
-      end
-    end)
-  end
-end
-```
-
-**Communicates with:** Agent runtime (a step may be an `Agent.prompt/2` call), Tool behaviour (a step may be direct tool execution), public API caller
-
-**Confidence:** HIGH — the pipeline operator pattern is idiomatic Elixir. Sources: [Elixir Pipeline Pattern](https://mattpruitt.com/articles/the-pipeline/)
-
----
-
-### Component 7: Team (`PhoenixAI.Team`)
-
-Single responsibility: run multiple agents in parallel and merge their results. Uses `Task.async_stream` or `Task.Supervisor.async_stream` for parallel execution with fault isolation.
-
-```elixir
-defmodule PhoenixAI.Team do
-  def run(agent_specs, merge_fn, opts \\ []) do
-    max_concurrency = Keyword.get(opts, :max_concurrency, length(agent_specs))
-
-    agent_specs
-    |> Task.async_stream(
-      fn {provider, prompt, agent_opts} ->
-        {:ok, pid} = Agent.start_link(agent_opts)
-        Agent.prompt(pid, prompt)
-      end,
-      max_concurrency: max_concurrency,
-      timeout: Keyword.get(opts, :timeout, 60_000)
+    :telemetry.execute(
+      [:phoenix_ai, :guardrails, :pipeline],
+      %{duration: duration},
+      %{policy_count: length(policies), status: status}
     )
-    |> Enum.reduce({:ok, []}, fn
-      {:ok, {:ok, result}}, {:ok, acc} -> {:ok, [result | acc]}
-      {:ok, {:error, _} = err}, _ -> err
-      {:exit, reason}, _ -> {:error, {:task_failed, reason}}
-    end)
-    |> then(fn {:ok, results} -> merge_fn.(Enum.reverse(results)) end)
+
+    result
   end
 end
 ```
 
-**Communicates with:** Agent runtime (spawns agents), public API caller (returns merged results)
+---
 
-**Confidence:** HIGH — `Task.async_stream` is well-documented standard OTP. Sources: [Elixir Task.Supervisor docs](https://hexdocs.pm/elixir/Task.Supervisor.html)
+### Pattern 3: `Request` Struct as Pipeline Context (Not `Plug.Conn`)
+
+**What:** A dedicated `%Guardrails.Request{}` struct carries all context needed by any
+policy: the messages list, the tool modules list, provider, and an `assigns` map for
+policy-to-policy communication (following Exq.Middleware.Pipeline's `assigns` pattern).
+
+**When to use:** Always. Do not pass raw keyword lists or individual parameters — the struct
+allows policies to annotate the request for downstream policies without modifying function
+signatures.
+
+**Why not `Plug.Conn`:** `Plug.Conn` is Phoenix/Cowboy-specific and would create a
+hard dependency on a web framework. `Request` is a plain Elixir struct with no deps.
+
+**Example:**
+
+```elixir
+defmodule PhoenixAI.Guardrails.Request do
+  @moduledoc "Pipeline context for guardrail policy evaluation."
+
+  @type t :: %__MODULE__{
+          messages: [PhoenixAI.Message.t()],
+          tools: [module()],
+          provider: atom(),
+          model: String.t() | nil,
+          assigns: map()
+        }
+
+  defstruct [
+    :provider,
+    :model,
+    messages: [],
+    tools: [],
+    assigns: %{}
+  ]
+end
+```
+
+The `assigns` map allows policies to annotate: for example, `JailbreakDetection` could
+set `assigns.jailbreak_score` so a downstream logging policy can read it without re-running
+detection.
 
 ---
 
-### Component 8: Structured Output (`PhoenixAI.Schema`)
+### Pattern 4: Integration via `with` in `chat/2` and `Agent.handle_call/3`
 
-Single responsibility: define JSON schemas for LLM responses and validate/cast the returned JSON into Elixir maps or Ecto-compatible structs.
+**What:** Guardrails run inside a `with` chain before the provider call. If guardrails halt,
+the `{:halt, violation}` is mapped to `{:error, violation}` and returned to the caller
+immediately. If they pass, the request flows to the provider unchanged.
 
-Two approach options (pick one):
-1. **Ecto changesets** — familiar to Phoenix developers, built-in to the ecosystem (used by Instructor.ex and Mojentic)
-2. **Plain maps + NimbleOptions** — lighter dependency for non-Phoenix apps
+**When to use:** This is the wiring pattern. The `opts` keyword list gains a `:guardrails`
+key that accepts a keyword list with `:policies` and `:preset` sub-keys.
 
-Recommendation: Ecto changesets via an optional `instructor_ex` integration, with fallback to plain map validation so the library is not Phoenix/Ecto-dependent.
+**Trade-offs:**
+- Pros: No changes to provider adapters, no OTP changes, opt-in by default (nil guardrails
+  = pass-through), backward compatible with all existing call sites.
+- Cons: Guardrails cannot be applied post-response (output filtering) in this design. That
+  is intentional for v0.3.0 scope — pre-call only.
 
-**Communicates with:** Provider adapter (sends schema to format_tools/structured_output params), Agent runtime (validates response before returning to caller)
+**Example — wiring in a provider adapter (illustrative, not the actual location):**
 
-**Confidence:** MEDIUM — Instructor.ex and Mojentic validate the Ecto approach, but the optional integration pattern needs design work. Sources: [Instructor.ex](https://github.com/thmsmlr/instructor_ex), [Mojentic](https://hexdocs.pm/mojentic/structured_output.html)
+```elixir
+# In the provider adapter or a shared wrapper:
+defp maybe_run_guardrails(messages, tools, provider, model, opts) do
+  case Keyword.get(opts, :guardrails) do
+    nil ->
+      {:ok, messages}
+
+    guardrail_opts ->
+      request = %Guardrails.Request{
+        messages: messages,
+        tools: tools,
+        provider: provider,
+        model: model
+      }
+
+      policies = resolve_policies(guardrail_opts)
+
+      case Guardrails.Pipeline.run(request, policies) do
+        {:ok, _request} -> {:ok, messages}
+        {:halt, violation} -> {:error, violation}
+      end
+  end
+end
+
+defp resolve_policies(opts) do
+  case Keyword.get(opts, :preset) do
+    nil -> Keyword.get(opts, :policies, [])
+    preset -> Guardrails.Presets.get(preset)
+  end
+end
+```
+
+---
+
+### Pattern 5: `JailbreakDetector` as a Second-Level Behaviour
+
+**What:** The `JailbreakDetection` policy delegates detection to a `JailbreakDetector`
+behaviour. The default implementation uses keyword heuristics. Consumers can swap in their
+own detector (ML-based, API-backed) by pointing the policy config at a different module.
+
+**When to use:** Whenever the detection logic itself needs to be replaceable independently
+of the policy wrapper.
+
+**Trade-offs:**
+- Pros: Separates the "when to block" (policy) from "what counts as jailbreak" (detector).
+  Testable in isolation. Consumers can upgrade detection without rewriting policy config.
+- Cons: One extra layer of indirection; acceptable because the two concerns genuinely differ.
+
+```elixir
+defmodule PhoenixAI.Guardrails.JailbreakDetector do
+  @moduledoc "Behaviour for jailbreak detection implementations."
+
+  @callback detect(text :: String.t(), opts :: keyword()) ::
+              {:safe, score :: float()}
+              | {:jailbreak, score :: float(), reason :: String.t()}
+end
+```
 
 ---
 
 ## Data Flow
 
-### Flow 1: Simple Chat Request
+### Flow 1: `chat/2` with Guardrails (Happy Path)
 
 ```
-Caller
-  → PhoenixAI.chat(messages, provider: :openai, model: "gpt-4o")
-    → resolve provider module from config
-    → PhoenixAI.Providers.OpenAI.chat(canonical_messages, opts)
-      → serialize messages to OpenAI format
-      → Req.post!(openai_url, body: openai_payload, headers: auth_headers)
-      → parse HTTP response
-      → return {:ok, %Response{...}}
-    ← {:ok, %Response{content: "...", usage: %{...}}}
-  ← {:ok, %Response{...}}
+Consumer
+  → PhoenixAI.chat(messages, provider: :openai, guardrails: [preset: :default])
+    → resolve provider module
+    → build Guardrails.Request{messages: messages, provider: :openai, ...}
+    → resolve preset policies → [JailbreakDetection, ContentFilter]
+    → Guardrails.Pipeline.run(request, policies)
+      → JailbreakDetection.check(request, []) → {:ok, request}
+      → ContentFilter.check(request, []) → {:ok, request}
+    ← {:ok, request}
+    → provider_mod.chat(messages, opts_without_guardrails)
+    ← {:ok, %Response{}}
+  ← {:ok, %Response{}}
 ```
 
-### Flow 2: Agent with Tool Calling Loop
+### Flow 2: `chat/2` with Guardrails (Halted Path)
 
 ```
-Caller
-  → PhoenixAI.Agent.prompt(pid, "What is the weather in Lisbon?")
-    → Agent GenServer appends user message to conversation state
-    → Provider.chat(conversation.messages, tools: formatted_tools)
-    ← %Response{finish_reason: "tool_use", tool_calls: [%ToolCall{name: "get_weather", args: %{city: "Lisbon"}}]}
-    → Agent dispatches: WeatherTool.execute(%{city: "Lisbon"}, context)
-    ← {:ok, "15°C, sunny"}
-    → Agent appends ToolResult to conversation
-    → Provider.chat(conversation.messages)  ← second pass, tool result now in history
-    ← %Response{finish_reason: "stop", content: "The weather in Lisbon is 15°C and sunny."}
-  ← {:ok, %Response{content: "The weather in Lisbon is 15°C and sunny."}}
+Consumer
+  → PhoenixAI.chat(messages, provider: :openai, guardrails: [preset: :strict])
+    → resolve provider module
+    → build Guardrails.Request{messages: messages, provider: :openai, ...}
+    → resolve preset policies → [JailbreakDetection, ContentFilter, ToolPolicy]
+    → Guardrails.Pipeline.run(request, policies)
+      → JailbreakDetection.check(request, [])
+        → JailbreakDetector.Default.detect(user_text, [])
+        ← {:jailbreak, 0.92, "role-playing bypass detected"}
+        ← {:halt, %PolicyViolation{policy: JailbreakDetection, reason: "...", score: 0.92}}
+    ← {:halt, %PolicyViolation{}}
+    ← {:error, %PolicyViolation{}}
+  ← {:error, %PolicyViolation{}}
+  (provider never called)
 ```
 
-### Flow 3: Streaming Response
+### Flow 3: `Agent.prompt/3` with Guardrails
 
 ```
-Caller
-  → PhoenixAI.stream(messages, on_chunk: fn chunk -> send(caller_pid, {:chunk, chunk}) end)
-    → PhoenixAI.Providers.Anthropic.stream(messages, on_chunk, opts)
-      → PhoenixAI.HTTP.Stream.stream(anthropic_sse_url, headers, body, raw_on_chunk)
-        → Finch opens persistent HTTP connection
-        → Finch.stream callback fires on each SSE line
-        → parse_chunk/1 called per line → %StreamChunk{}
-        → on_chunk.(%StreamChunk{delta: "The "})
-        → on_chunk.(%StreamChunk{delta: "weather"})
-        → ... until %StreamChunk{finish_reason: "stop"}
-    ← {:ok, %Response{content: aggregated_content, usage: %{...}}}
-  ← {:ok, %Response{...}}
+Consumer
+  → PhoenixAI.Agent.prompt(pid, "text", guardrails: [policies: [{JailbreakDetection, []}]])
+    → GenServer.call/3 with {:prompt, text, opts}
+    → Agent.handle_call/3
+      → build user_msg = %Message{role: :user, content: text}
+      → build messages = history ++ [user_msg]
+      → extract guardrails from opts
+      → build Guardrails.Request{messages: messages, tools: state.tools, ...}
+      → Guardrails.Pipeline.run(request, policies)
+        → {:ok, _} → continue; spawn Task for provider call
+        → {:halt, violation} → GenServer.reply(from, {:error, violation}); no Task spawned
 ```
 
-### Flow 4: Parallel Agent Team
+### Flow 4: `stream/3` with Guardrails
 
 ```
-Caller
-  → PhoenixAI.Team.run([
-      {provider: :openai, prompt: "Write the intro"},
-      {provider: :anthropic, prompt: "Write the body"},
-      {provider: :openai, prompt: "Write the conclusion"}
-    ], merge_fn: &String.join(&1, "\n\n"))
-    → Task.async_stream spawns 3 concurrent agent processes
-    → Each agent independently calls its provider
-    → Results collected as tasks complete
-    → merge_fn called with [intro, body, conclusion]
-  ← {:ok, "intro\n\nbody\n\nconclusion"}
-```
-
-### Flow 5: Sequential Pipeline
-
-```
-Caller
-  → PhoenixAI.Pipeline.run([
-      &search_web/1,
-      &write_summary/1,
-      &generate_social_posts/1
-    ], initial_query)
-    → step 1: search_web(initial_query) → {:ok, web_results}
-    → step 2: write_summary(web_results) → {:ok, summary}
-    → step 3: generate_social_posts(summary) → {:ok, posts}
-  ← {:ok, posts}
+Consumer
+  → provider_mod.stream(messages, callback, opts)
+    → same pre-flight check as chat/2
+    → guardrails pass → open Finch SSE connection
+    → guardrails halt → {:error, %PolicyViolation{}} returned before Finch is invoked
 ```
 
 ---
 
-## OTP Process Map
+### State Management
 
-```
-Application Supervision Tree (library consumer's app)
-└── PhoenixAI.Supervisor (optional, started by library or consumer)
-    ├── PhoenixAI.Finch (Finch HTTP pool for streaming)
-    ├── DynamicSupervisor (for named agent sessions)
-    │   ├── PhoenixAI.Agent [session_1]  (GenServer)
-    │   ├── PhoenixAI.Agent [session_2]  (GenServer)
-    │   └── ...
-    └── Task.Supervisor (for Team parallel execution)
-        ├── Task [agent_spec_1]
-        ├── Task [agent_spec_2]
-        └── ...
-```
+The guardrails pipeline is stateless. There is no GenServer, no ETS, no process.
+Each call to `Guardrails.Pipeline.run/2` is a pure function call. The `assigns` map on
+`Request` is the only in-flight state, scoped to a single pipeline execution.
 
-**Restart strategy:** DynamicSupervisor uses one_for_one. Agent crashes do not affect other agents. Task failures in Team are caught and mapped to `{:error, {:task_failed, reason}}`.
+Stateful policies (e.g., `TokenBudget`, `CostBudget`) are explicitly **out of scope** for
+this library. They belong in `phoenix_ai_store` where persistence is available. This
+constraint keeps the guardrails subsystem pure and easy to test.
 
 ---
 
-## Patterns to Follow
+## Integration Points
 
-### Pattern 1: Behaviour-Based Provider Abstraction
+### New vs. Modified Components
 
-Use `@behaviour` and `@callback` to define provider contracts. Consumers select providers via config or runtime options. This enables test mocking without additional mock libraries.
+| Component | Status | Change |
+|-----------|--------|--------|
+| `Guardrails.Policy` | NEW | Behaviour module, no existing file |
+| `Guardrails.Request` | NEW | Struct, no existing file |
+| `Guardrails.PolicyViolation` | NEW | Struct, no existing file |
+| `Guardrails.Pipeline` | NEW | Not related to existing `PhoenixAI.Pipeline` |
+| `Guardrails.Presets` | NEW | Helper module |
+| `JailbreakDetector` behaviour | NEW | No existing file |
+| `JailbreakDetector.Default` | NEW | No existing file |
+| `Policies.JailbreakDetection` | NEW | No existing file |
+| `Policies.ContentFilter` | NEW | No existing file |
+| `Policies.ToolPolicy` | NEW | No existing file |
+| `PhoenixAI.Agent` | MODIFIED | Add guardrails check before Task spawn |
+| `PhoenixAI.providers/*.ex` | NOT MODIFIED | Adapters stay clean; no guardrails logic |
+| `PhoenixAI.Stream` | NOT MODIFIED | Guardrails run before Stream.run is called |
+
+### Where Guardrails Wire In (Exact Points)
+
+**`PhoenixAI.Agent.handle_call/3` — `:prompt` clause:**
 
 ```elixir
-# In config/config.exs
-config :phoenix_ai, :default_provider, PhoenixAI.Providers.OpenAI
+def handle_call({:prompt, text, msg_opts}, from, state) do
+  user_msg = %Message{role: :user, content: text}
+  messages = build_messages(state, user_msg, msg_opts)
 
-# In tests
-config :phoenix_ai, :default_provider, PhoenixAI.Providers.Mock
-```
+  # NEW: guardrails gate
+  guardrail_opts = Keyword.get(msg_opts, :guardrails)
 
-Source: [Swoosh adapter pattern](https://www.djm.org.uk/posts/writing-extensible-elixir-with-behaviours-adapters-pluggable-backends/)
+  case run_guardrails(messages, state.tools, state.provider_atom, guardrail_opts) do
+    {:ok, _} ->
+      task = Task.async(fn ->
+        if state.tools != [] do
+          ToolLoop.run(state.provider_mod, messages, state.tools, state.opts)
+        else
+          state.provider_mod.chat(messages, state.opts)
+        end
+      end)
+      {:noreply, %{state | pending: {from, task.ref}, pending_user_msg: user_msg}}
 
-### Pattern 2: Railway-Oriented Pipelines
-
-All public functions return `{:ok, result}` or `{:error, reason}`. Never raise in the library core. Use `with` for multi-step operations:
-
-```elixir
-def prompt(agent_pid, text, opts \\ []) do
-  with {:ok, _} <- validate_prompt(text),
-       {:ok, response} <- GenServer.call(agent_pid, {:prompt, text, opts}, timeout(opts)) do
-    {:ok, response}
+    {:error, violation} ->
+      {:reply, {:error, violation}, state}
   end
 end
 ```
 
-### Pattern 3: Spawn Tasks Inside Agent, Handle with handle_info
+**`PhoenixAI.providers/openai.ex` (and other adapters) — NOT modified:**
 
-When an agent makes an async provider call (e.g., for streaming), spawn a `Task` linked to the GenServer. The BEAM automatically delivers the result to `handle_info/2`:
-
-```elixir
-def handle_call({:prompt, text, opts}, from, state) do
-  task = Task.async(fn -> Provider.chat(state.messages, opts) end)
-  {:noreply, %{state | pending: {task, from}}}
-end
-
-def handle_info({ref, result}, %{pending: {%Task{ref: ref}, from}} = state) do
-  GenServer.reply(from, result)
-  {:noreply, %{state | pending: nil}}
-end
-```
-
-Source: [Elixir Forum Task inside GenServer](https://elixirforum.com/t/test-for-async-task-inside-a-genserver/29426)
-
-### Pattern 4: NimbleOptions for Configuration Schemas
-
-Use NimbleOptions to validate all public function options at compile time where possible. This provides self-documenting schemas and clear error messages:
-
-```elixir
-@chat_schema NimbleOptions.new!([
-  provider: [type: :atom, required: false],
-  model: [type: :string, required: false],
-  temperature: [type: :float, default: 1.0],
-  max_tokens: [type: :pos_integer],
-  tools: [type: {:list, :atom}, default: []]
-])
-```
-
-Source: [NimbleOptions docs](https://hexdocs.pm/nimble_options/NimbleOptions.html)
+Provider adapters do not know about guardrails. The gate is upstream in the call chain.
+This preserves the existing architecture: adapters speak only the provider's HTTP API.
 
 ---
 
-## Anti-Patterns to Avoid
+## Comparison with Plug's Middleware Model
 
-### Anti-Pattern 1: Provider Logic Leaking Into Agent Runtime
+| Aspect | Plug | PhoenixAI Guardrails |
+|--------|------|---------------------|
+| Unit of middleware | Module with `init/1` + `call/2` | Module with `check/2` only |
+| State carrier | `%Plug.Conn{}` (HTTP-specific) | `%Guardrails.Request{}` (AI-specific) |
+| Halt mechanism | `conn.halted = true` flag + `Plug.Conn.halt/1` | `{:halt, violation}` tagged tuple |
+| Pipeline executor | `Plug.Builder` (compile-time macro) | `Enum.reduce_while` (runtime, no macro) |
+| Return value | Modified conn struct (always a conn) | `{:ok, request}` or `{:halt, violation}` |
+| Phoenix dependency | Yes (inherent) | No — plain Elixir |
+| Composability | `plug/2` macro, compile-time ordering | `[{mod, opts}]` list, runtime ordering |
+| `init/1` pattern | Required — compile-time option transform | Not used — opts passed directly to check/2 |
 
-**What goes wrong:** The Agent GenServer contains `if provider == :openai do` conditionals.
-**Why bad:** Breaks the behaviour contract; adding a provider requires modifying the agent core.
-**Instead:** All provider-specific logic lives in the provider adapter module. The agent calls `provider.chat/2` without knowing which provider it is.
+**Why not use `Plug.Builder` directly:**
 
-### Anti-Pattern 2: Using Req for SSE Streaming
+1. `Plug.Conn` is an HTTP-specific struct. Carrying HTTP state into an AI guardrail pipeline
+   introduces a dependency on `plug` and couples AI safety logic to HTTP request lifecycle.
+2. Plug's halt mechanism (`conn.halted`) is a flag on a mutable struct — subsequent plugs
+   must check this flag manually unless using `Plug.Builder`. For a small, purpose-built
+   pipeline, `reduce_while` with a tagged tuple is cleaner and more explicit.
+3. `Plug.Builder` generates code at compile time; the policy list must be known at compile
+   time or wrapped in runtime modules. PhoenixAI's guardrails must support runtime-configured
+   policy lists (e.g., different presets per call site).
 
-**What goes wrong:** Req's plugin architecture does not support long-running SSE connections; requests hang or buffer the full response.
-**Why bad:** Streaming doesn't work; memory spikes on large responses.
-**Instead:** Use Finch directly for all streaming connections. This is validated by ReqLLM 1.0's production decision. Source: [ReqLLM blog](https://jido.run/blog/announcing-req_llm-1_0)
+**What we borrow from Plug:**
 
-### Anti-Pattern 3: Storing Conversation History Outside the Agent
+- The `@behaviour` approach for middleware modules (same pattern Plug uses).
+- The `assigns` map concept for inter-policy communication (from `Plug.Conn.assigns`).
+- The "halt early, skip remaining" semantic (directly mirrored in `reduce_while`).
 
-**What goes wrong:** The caller tracks message history as a list and passes it in on every request.
-**Why bad:** Callers must know the internal shape of messages; history gets out of sync across processes.
-**Instead:** The Agent GenServer owns the conversation state. Callers send prompts and receive responses. History retrieval is via `Agent.get_history/1`.
+---
 
-### Anti-Pattern 4: One Global Finch Pool for All Streaming
+## Anti-Patterns
 
-**What goes wrong:** A single Finch pool becomes a bottleneck for many concurrent streaming sessions.
-**Why bad:** High-volume scenarios degrade; connections queue.
-**Instead:** Configure adequate pool size in `PhoenixAI.Finch` and document tuning. For very high concurrency, consumers can start their own Finch pools.
+### Anti-Pattern 1: Putting Guardrail Logic in Provider Adapters
 
-### Anti-Pattern 5: Synchronous Tool Execution Inside handle_call
+**What people do:** Add policy checks inside `OpenAI.chat/2` or `Anthropic.chat/2`.
+**Why it's wrong:** Provider adapters would need to know about guardrails, violating their
+single responsibility (translate between canonical structs and HTTP). Every new policy
+would require modifying multiple adapter files.
+**Do this instead:** Guardrails run in the caller's path, before the adapter is invoked.
+Adapters receive only messages; they never see policy config.
 
-**What goes wrong:** Tool execution (HTTP calls, database queries) blocks the agent's GenServer while inside `handle_call`.
-**Why bad:** Agent process is blocked; no other messages can be processed; timeouts occur.
-**Instead:** Convert to async using Task (see Pattern 3 above). Execute tools in a Task, handle results in `handle_info`.
+### Anti-Pattern 2: Making the Pipeline a GenServer
+
+**What people do:** Start a `GuardRail.Server` GenServer that holds policy state and
+processes requests.
+**Why it's wrong:** Introduces process bottleneck; every chat call would serialize through
+one process. Stateful policies (rate limits, cost budgets) also need persistence, which
+belongs in `phoenix_ai_store` not in-process state.
+**Do this instead:** Keep `Guardrails.Pipeline.run/2` a pure function. Stateful policies
+are out of scope and belong in a companion library.
+
+### Anti-Pattern 3: Using Protocols Instead of Behaviours for Policy Modules
+
+**What people do:** Define a `PhoenixAI.Guardrails.Policy` protocol with a `check/2`
+function.
+**Why it's wrong:** Protocols are for dispatching on data types — the "what are you?" 
+question. Policies are modules with function implementations — the "what do you do?" 
+question. Behaviours are the correct Elixir primitive for defining a module contract.
+Additionally, behaviours give `@impl true` compile-time checks; protocols do not.
+**Do this instead:** `@behaviour PhoenixAI.Guardrails.Policy` with `@callback check/2`.
+
+### Anti-Pattern 4: Returning `{:error, reason}` from Policies Instead of `{:halt, violation}`
+
+**What people do:** Define the callback as returning `{:ok, request} | {:error, reason}`.
+**Why it's wrong:** `{:error, reason}` loses the structured `PolicyViolation` type, making
+it impossible for callers to distinguish a guardrail block from a provider error. Both end
+up as `{:error, _}` at the call site.
+**Do this instead:** Policies return `{:halt, %PolicyViolation{}}`. The pipeline executor
+maps this to `{:error, %PolicyViolation{}}` at the boundary. Callers can `match?(%PolicyViolation{}, reason)` to distinguish policy blocks from provider errors.
+
+### Anti-Pattern 5: Coupling `JailbreakDetection` and `JailbreakDetector.Default` into One Module
+
+**What people do:** Put the detection algorithm directly inside the policy module.
+**Why it's wrong:** Consumers cannot swap detection logic independently. Testing the policy
+requires testing the detection algorithm simultaneously.
+**Do this instead:** The `JailbreakDetection` policy holds config and delegates to the
+`JailbreakDetector` behaviour. `JailbreakDetector.Default` implements keyword heuristics.
+Consumers can pass `detector: MyApp.MLDetector` in the policy opts.
 
 ---
 
 ## Suggested Build Order
 
-This order respects dependency direction — each component can be built and tested in isolation before the next layer depends on it.
+This order respects dependency direction: each component can be built and tested before
+anything that depends on it is written.
 
 ```
-Phase 1 — Core Foundation
-  1a. Core Data Model structs (Message, Response, ToolCall, ToolResult, StreamChunk)
-  1b. Provider Behaviour definition (@callback contracts only)
-  1c. HTTP Transport layer (Req wrapper + Finch SSE layer)
-  1d. First Provider Adapter (OpenAI — most common, best reference)
+Phase 1 — Core Contracts (no deps on each other)
+  1a. Guardrails.Request struct
+  1b. Guardrails.PolicyViolation struct
+  1c. Guardrails.Policy behaviour (@callback only)
+  1d. JailbreakDetector behaviour (@callback only)
 
-Phase 2 — Agent Fundamentals
-  2a. Tool Behaviour definition
-  2b. Agent GenServer (completion loop, no tools yet)
-  2c. Add tool dispatch loop to Agent
-  2d. Remaining Provider Adapters (Anthropic, OpenRouter)
+Phase 2 — Pipeline Executor
+  2a. Guardrails.Pipeline.run/2 (depends on Request, PolicyViolation, Policy)
+  2b. Telemetry event for pipeline execution
 
-Phase 3 — Structured Output
-  3a. Schema definition (map-based, no Ecto dependency)
-  3b. Provider-side structured output params (format_schema per provider)
-  3c. Response validation/casting
+Phase 3 — Concrete Implementations
+  3a. JailbreakDetector.Default (depends on JailbreakDetector behaviour)
+  3b. Policies.JailbreakDetection (depends on Policy, JailbreakDetector)
+  3c. Policies.ContentFilter (depends on Policy)
+  3d. Policies.ToolPolicy (depends on Policy, Message.tool_calls shape)
 
-Phase 4 — Streaming
-  4a. Finch SSE streaming in HTTP transport layer
-  4b. Provider streaming adapters (parse_chunk callbacks)
-  4c. Agent streaming mode (stream chunks out via callback/PID)
+Phase 4 — Presets
+  4a. Guardrails.Presets (depends on all policies)
 
-Phase 5 — Orchestration
-  5a. Pipeline (sequential, pure functions — no new OTP)
-  5b. Team (parallel, Task.async_stream)
-  5c. DynamicSupervisor integration for named sessions
+Phase 5 — Integration Wiring
+  5a. Modify PhoenixAI.Agent.handle_call/3 to run guardrails before Task spawn
+  5b. Document opt-in pattern for direct provider.chat/2 callers
 
-Phase 6 — Developer Experience
-  6a. NimbleOptions schemas for all public functions
-  6b. Mock provider for testing
-  6c. Telemetry events
+Phase 6 — Tests
+  6a. Unit tests for each policy in isolation
+  6b. Unit tests for JailbreakDetector.Default keyword patterns
+  6c. Integration test: Agent.prompt with guardrails preset
+  6d. Integration test: policy violation returned as {:error, %PolicyViolation{}}
 ```
 
-**Rationale for this order:**
-- Data model must exist before any adapter can be written (adapters output canonical structs)
-- Provider behaviour must be defined before adapter OR agent (both depend on it)
-- One provider working is sufficient to build and test the agent loop
-- Streaming is separate from core chat flow; adding it later avoids premature complexity
-- Orchestration (Pipeline, Team) composes over the agent, not under it — built last
+**Rationale:**
+
+- Contracts (Phase 1) before implementations (Phase 3) — implementations cannot compile
+  without their behaviour defined.
+- `Pipeline.run/2` (Phase 2) before concrete policies (Phase 3) — the executor is the
+  hardest-to-get-wrong piece; build it with stub policies first.
+- Presets (Phase 4) after all policies exist — a preset is just a function returning a
+  list of modules; it cannot reference modules that do not exist yet.
+- Integration wiring (Phase 5) last — touches existing production code (`Agent`); doing it
+  last minimizes the window where existing tests could be broken.
 
 ---
 
-## Scalability Considerations
+## Scaling Considerations
 
-| Concern | At 100 users | At 10K users | At 1M users |
-|---------|--------------|--------------|-------------|
-| Concurrent agents | DynamicSupervisor, one GenServer per session | Same — BEAM handles 10K processes natively | Distribute across nodes via :pg / distributed Erlang |
-| Provider rate limits | Per-provider retry with exponential backoff in adapter | Add per-provider rate limiter process (GenServer token bucket) | Provider-specific pooling, multiple API keys |
-| Streaming connections | Finch pool size 10 default | Tune Finch pool, monitor queue depth | Multiple Finch pools partitioned by provider |
-| Memory (conversation history) | Bounded by model context window | Enforce max_messages config in Agent | Summarization tool to compress history |
+This system is a pre-call function chain, not a process topology. Scaling concerns are
+minimal for v0.3.0 because:
+
+| Scale | Architecture Impact |
+|-------|---------------------|
+| 0-10K concurrent requests | None — each `Guardrails.Pipeline.run/2` runs in the caller's process, no shared state |
+| 10K-1M requests | Keyword heuristics stay fast (~microseconds per call); no bottleneck |
+| ML-based detector added | Detector is a behaviour; add a new module implementing it, no pipeline changes |
+| Stateful rate-limiting needed | Do not add to this library; implement in `phoenix_ai_store` using ETS or Ecto |
 
 ---
 
-## References
+## Sources
 
 | Source | Confidence | Used For |
 |--------|------------|----------|
-| [ReqLLM overview](https://hexdocs.pm/req_llm/overview.html) | HIGH | Provider behaviour, streaming architecture |
-| [ReqLLM 1.0 blog](https://jido.run/blog/announcing-req_llm-1_0) | HIGH | Finch-for-streaming decision |
-| [Alloy Elixir Forum](https://elixirforum.com/t/alloy-a-minimal-otp-native-ai-agent-engine-for-elixir/74464) | HIGH | Minimal agent loop pattern, OTP integration |
-| [Jido GitHub](https://github.com/agentjido/jido) | HIGH | Agent GenServer, directive pattern, multi-agent |
-| [LangChain.ex HexDocs](https://hexdocs.pm/langchain/readme.html) | HIGH | LLMChain/ChatModel component hierarchy |
-| [ex_llm GitHub](https://github.com/azmaveth/ex_llm) | HIGH | Provider delegation, pipeline patterns |
-| [Laravel AI SDK docs](https://laravel.com/docs/12.x/ai-sdk) | HIGH | Agent interface, tool calling, structured output |
-| [Fly.io streaming guide](https://fly.io/phoenix-files/streaming-openai-responses/) | HIGH | SSE parsing, Finch.stream/5 usage |
-| [Swoosh adapter pattern](https://www.djm.org.uk/posts/writing-extensible-elixir-with-behaviours-adapters-pluggable-backends/) | HIGH | @behaviour/@callback for provider abstraction |
-| [Elixir Task.Supervisor docs](https://hexdocs.pm/elixir/Task.Supervisor.html) | HIGH | Parallel agent execution pattern |
-| [NimbleOptions docs](https://hexdocs.pm/nimble_options/NimbleOptions.html) | HIGH | Config schema validation |
-| [Instructor.ex GitHub](https://github.com/thmsmlr/instructor_ex) | MEDIUM | Structured output with Ecto |
-| [Mojentic structured output](https://hexdocs.pm/mojentic/structured_output.html) | MEDIUM | Ecto schema approach for LLM responses |
+| [Plug.Builder HexDocs](https://hexdocs.pm/plug/Plug.Builder.html) | HIGH | Plug halt semantics, init/call pattern |
+| [Plug.Conn HexDocs](https://hexdocs.pm/plug/Plug.Conn.html) | HIGH | assigns pattern, halt flag design |
+| [Exq.Middleware.Pipeline HexDocs](https://hexdocs.pm/exq/Exq.Middleware.Pipeline.html) | HIGH | assigns map, halt vs terminate semantics |
+| [LlmGuard GitHub](https://github.com/North-Shore-AI/LlmGuard) | MEDIUM | Elixir AI guardrails detector chain pattern |
+| [Elixir Behaviours — Elixir School](https://elixirschool.com/en/lessons/advanced/behaviours) | HIGH | @behaviour vs protocol selection |
+| [Writing extensible Elixir with Behaviours](https://www.djm.org.uk/posts/writing-extensible-elixir-with-behaviours-adapters-pluggable-backends/) | HIGH | @callback contract for extensible modules |
+| [Enum.reduce_while — Elixir docs](https://hexdocs.pm/elixir/Enum.html#reduce_while/3) | HIGH | Halt-on-first semantics executor |
+| Existing `PhoenixAI.Pipeline.run/3` (codebase) | HIGH | Consistent railway pattern precedent |
+| Existing `PhoenixAI.Agent.handle_call/3` (codebase) | HIGH | Exact integration point identified |
+
+---
+
+*Architecture research for: PhoenixAI v0.3.0 Guardrails Middleware-Chain Policy System*
+*Researched: 2026-04-04*
