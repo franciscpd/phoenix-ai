@@ -57,4 +57,18 @@ defmodule PhoenixAI.Usage do
       provider_specific: raw
     }
   end
+
+  def from_provider(:anthropic, raw) when is_map(raw) do
+    input = Map.get(raw, "input_tokens", 0)
+    output = Map.get(raw, "output_tokens", 0)
+
+    %__MODULE__{
+      input_tokens: input,
+      output_tokens: output,
+      total_tokens: input + output,
+      cache_read_tokens: Map.get(raw, "cache_read_input_tokens"),
+      cache_creation_tokens: Map.get(raw, "cache_creation_input_tokens"),
+      provider_specific: raw
+    }
+  end
 end

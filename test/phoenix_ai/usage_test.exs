@@ -54,4 +54,40 @@ defmodule PhoenixAI.UsageTest do
       assert usage.total_tokens == 42
     end
   end
+
+  describe "from_provider/2 with :anthropic" do
+    test "maps Anthropic usage fields to normalized struct" do
+      raw = %{
+        "input_tokens" => 150,
+        "output_tokens" => 80,
+        "cache_creation_input_tokens" => 20,
+        "cache_read_input_tokens" => 10
+      }
+
+      usage = Usage.from_provider(:anthropic, raw)
+
+      assert usage.input_tokens == 150
+      assert usage.output_tokens == 80
+      assert usage.total_tokens == 230
+      assert usage.cache_read_tokens == 10
+      assert usage.cache_creation_tokens == 20
+      assert usage.provider_specific == raw
+    end
+
+    test "auto-calculates total_tokens" do
+      raw = %{"input_tokens" => 100, "output_tokens" => 50}
+
+      usage = Usage.from_provider(:anthropic, raw)
+      assert usage.total_tokens == 150
+    end
+
+    test "cache fields are nil when not present" do
+      raw = %{"input_tokens" => 100, "output_tokens" => 50}
+
+      usage = Usage.from_provider(:anthropic, raw)
+
+      assert usage.cache_read_tokens == nil
+      assert usage.cache_creation_tokens == nil
+    end
+  end
 end
