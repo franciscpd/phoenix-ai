@@ -90,4 +90,85 @@ defmodule PhoenixAI.UsageTest do
       assert usage.cache_creation_tokens == nil
     end
   end
+
+  describe "from_provider/2 with :openrouter" do
+    test "delegates to OpenAI mapping" do
+      raw = %{
+        "prompt_tokens" => 150,
+        "completion_tokens" => 80,
+        "total_tokens" => 230,
+        "native_tokens_prompt" => 145,
+        "native_tokens_completion" => 78
+      }
+
+      usage = Usage.from_provider(:openrouter, raw)
+
+      assert usage.input_tokens == 150
+      assert usage.output_tokens == 80
+      assert usage.total_tokens == 230
+      assert usage.provider_specific == raw
+    end
+  end
+
+  describe "from_provider/2 with nil and empty map" do
+    test "nil returns zero-valued usage" do
+      usage = Usage.from_provider(:openai, nil)
+
+      assert usage.input_tokens == 0
+      assert usage.output_tokens == 0
+      assert usage.total_tokens == 0
+      assert usage.cache_read_tokens == nil
+      assert usage.cache_creation_tokens == nil
+      assert usage.provider_specific == %{}
+    end
+
+    test "empty map returns zero-valued usage" do
+      usage = Usage.from_provider(:openai, %{})
+
+      assert usage.input_tokens == 0
+      assert usage.output_tokens == 0
+      assert usage.total_tokens == 0
+      assert usage.provider_specific == %{}
+    end
+  end
+
+  describe "from_provider/2 with unknown provider" do
+    test "fallback handles OpenAI-compatible format" do
+      raw = %{
+        "prompt_tokens" => 100,
+        "completion_tokens" => 50,
+        "total_tokens" => 150
+      }
+
+      usage = Usage.from_provider(:groq, raw)
+
+      assert usage.input_tokens == 100
+      assert usage.output_tokens == 50
+      assert usage.total_tokens == 150
+      assert usage.provider_specific == raw
+    end
+
+    test "fallback handles Anthropic-style format" do
+      raw = %{
+        "input_tokens" => 100,
+        "output_tokens" => 50,
+        "cache_read_input_tokens" => 5
+      }
+
+      usage = Usage.from_provider(:custom, raw)
+
+      assert usage.input_tokens == 100
+      assert usage.output_tokens == 50
+      assert usage.total_tokens == 150
+      assert usage.cache_read_tokens == 5
+      assert usage.provider_specific == raw
+    end
+
+    test "fallback auto-calculates total_tokens when missing" do
+      raw = %{"prompt_tokens" => 30, "completion_tokens" => 20}
+
+      usage = Usage.from_provider(:together, raw)
+      assert usage.total_tokens == 50
+    end
+  end
 end

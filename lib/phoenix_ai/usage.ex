@@ -71,4 +71,24 @@ defmodule PhoenixAI.Usage do
       provider_specific: raw
     }
   end
+
+  def from_provider(:openrouter, raw), do: from_provider(:openai, raw)
+
+  def from_provider(_provider, nil), do: %__MODULE__{}
+  def from_provider(_provider, raw) when raw == %{}, do: %__MODULE__{}
+
+  def from_provider(_provider, raw) when is_map(raw) do
+    input = Map.get(raw, "input_tokens") || Map.get(raw, "prompt_tokens") || 0
+    output = Map.get(raw, "output_tokens") || Map.get(raw, "completion_tokens") || 0
+    total = Map.get(raw, "total_tokens") || input + output
+
+    %__MODULE__{
+      input_tokens: input,
+      output_tokens: output,
+      total_tokens: total,
+      cache_read_tokens: Map.get(raw, "cache_read_input_tokens"),
+      cache_creation_tokens: Map.get(raw, "cache_creation_input_tokens"),
+      provider_specific: raw
+    }
+  end
 end
