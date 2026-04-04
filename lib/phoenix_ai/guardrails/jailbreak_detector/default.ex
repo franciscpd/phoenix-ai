@@ -57,7 +57,10 @@ defmodule PhoenixAI.Guardrails.JailbreakDetector.Default do
   @encoding_evasion_weight 0.2
 
   @impl true
-  def detect(content, _opts) do
+  def detect(nil, _opts), do: {:safe, %DetectionResult{}}
+  def detect("", _opts), do: {:safe, %DetectionResult{}}
+
+  def detect(content, _opts) when is_binary(content) do
     {keyword_score, keyword_patterns, keyword_categories} = scan_keyword_categories(content)
     {evasion_score, evasion_patterns, evasion_categories} = scan_base64(content)
 
@@ -102,25 +105,44 @@ defmodule PhoenixAI.Guardrails.JailbreakDetector.Default do
   defp accumulate_category(acc, _category, _weight, _matched), do: acc
 
   # Finds base64 strings (20+ chars), decodes them, and re-scans with keyword patterns.
+  # Returns evasion weight (0.2) PLUS the decoded content's keyword weights.
   defp scan_base64(content) do
-    base64_regex = ~r/[A-Za-z0-9+\/]{20,}={0,2}/
+    content
+    |> extract_base64_candidates()
+    |> decode_candidates()
+    |> score_decoded_texts()
+  end
 
-    matches = Regex.scan(base64_regex, content) |> List.flatten()
+  defp extract_base64_candidates(content) do
+    ~r/[A-Za-z0-9+\/]{20,}={0,2}/
+    |> Regex.scan(content)
+    |> List.flatten()
+  end
 
-    found =
-      Enum.any?(matches, fn candidate ->
-        case Base.decode64(candidate) do
-          {:ok, decoded} ->
-            {score, _patterns, _cats} = scan_keyword_categories(decoded)
-            score > 0.0
+  defp decode_candidates(candidates) do
+    Enum.flat_map(candidates, &try_decode/1)
+  end
 
-          :error ->
-            false
-        end
-      end)
+  defp try_decode(candidate) do
+    case Base.decode64(candidate) do
+      {:ok, decoded} when byte_size(decoded) > 0 ->
+        if String.valid?(decoded), do: [decoded], else: []
 
-    if found do
-      {@encoding_evasion_weight, ["base64_encoded_payload"], [:encoding_evasion]}
+      _ ->
+        []
+    end
+  end
+
+  defp score_decoded_texts([]), do: {0.0, [], []}
+
+  defp score_decoded_texts(texts) do
+    {best_score, best_patterns, _best_cats} =
+      texts
+      |> Enum.map(&scan_keyword_categories/1)
+      |> Enum.max_by(fn {score, _p, _c} -> score end)
+
+    if best_score > 0.0 do
+      {@encoding_evasion_weight + best_score, best_patterns, [:encoding_evasion]}
     else
       {0.0, [], []}
     end
