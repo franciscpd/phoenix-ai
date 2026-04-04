@@ -19,8 +19,8 @@ defmodule PhoenixAI.Providers.AnthropicTest do
       assert response.content == "Hello! How can I help you today?"
       assert response.finish_reason == "end_turn"
       assert response.model == "claude-sonnet-4-5-20250514"
-      assert response.usage["input_tokens"] == 10
-      assert response.usage["output_tokens"] == 9
+      assert response.usage.input_tokens == 10
+      assert response.usage.output_tokens == 9
       assert response.tool_calls == []
       assert response.provider_response == fixture
     end

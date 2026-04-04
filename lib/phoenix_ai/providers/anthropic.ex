@@ -17,7 +17,7 @@ defmodule PhoenixAI.Providers.Anthropic do
 
   @behaviour PhoenixAI.Provider
 
-  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall}
+  alias PhoenixAI.{Error, Message, Response, StreamChunk, ToolCall, Usage}
 
   @default_base_url "https://api.anthropic.com/v1"
   @default_api_version "2023-06-01"
@@ -150,10 +150,11 @@ defmodule PhoenixAI.Providers.Anthropic do
 
   def parse_chunk(%{event: "message_delta", data: data}) do
     json = Jason.decode!(data)
+    raw_usage = Map.get(json, "usage")
 
     %StreamChunk{
       finish_reason: get_in(json, ["delta", "stop_reason"]),
-      usage: Map.get(json, "usage")
+      usage: if(raw_usage, do: Usage.from_provider(:anthropic, raw_usage), else: nil)
     }
   end
 
@@ -195,7 +196,7 @@ defmodule PhoenixAI.Providers.Anthropic do
     content_blocks = Map.get(body, "content", [])
     stop_reason = Map.get(body, "stop_reason")
     model = Map.get(body, "model")
-    usage = Map.get(body, "usage", %{})
+    usage = Usage.from_provider(:anthropic, Map.get(body, "usage"))
 
     {structured_input, remaining_blocks} = extract_structured_output(content_blocks)
 
