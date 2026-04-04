@@ -1,13 +1,13 @@
 defmodule PhoenixAI.Guardrails.PolicyTest do
   use ExUnit.Case, async: true
 
-  alias PhoenixAI.Guardrails.{Policy, PolicyViolation, Request}
+  alias PhoenixAI.Guardrails.{PolicyViolation, Request}
   alias PhoenixAI.Message
 
   describe "behaviour compliance" do
     test "module implementing check/2 satisfies the behaviour" do
       defmodule PassPolicy do
-        @behaviour Policy
+        @behaviour PhoenixAI.Guardrails.Policy
 
         @impl true
         def check(request, _opts), do: {:ok, request}
@@ -19,7 +19,7 @@ defmodule PhoenixAI.Guardrails.PolicyTest do
 
     test "module returning {:halt, violation} satisfies the behaviour" do
       defmodule HaltPolicy do
-        @behaviour Policy
+        @behaviour PhoenixAI.Guardrails.Policy
 
         @impl true
         def check(_request, _opts) do
