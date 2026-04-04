@@ -63,25 +63,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| JAIL-01 | — | Pending |
-| JAIL-02 | — | Pending |
-| JAIL-03 | — | Pending |
-| FILT-01 | — | Pending |
-| TOOL-01 | — | Pending |
-| TOOL-02 | — | Pending |
-| PRES-01 | — | Pending |
-| TELE-01 | — | Pending |
-| CONF-01 | — | Pending |
+| CORE-01 | Phase 13 | Pending |
+| CORE-02 | Phase 13 | Pending |
+| CORE-03 | Phase 13 | Pending |
+| CORE-04 | Phase 14 | Pending |
+| JAIL-01 | Phase 15 | Pending |
+| JAIL-02 | Phase 15 | Pending |
+| JAIL-03 | Phase 15 | Pending |
+| FILT-01 | Phase 16 | Pending |
+| TOOL-01 | Phase 16 | Pending |
+| TOOL-02 | Phase 16 | Pending |
+| PRES-01 | Phase 17 | Pending |
+| TELE-01 | Phase 17 | Pending |
+| CONF-01 | Phase 17 | Pending |
 
 **Coverage:**
 - v0.3.0 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-04*
-*Last updated: 2026-04-04 after initial definition*
+*Last updated: 2026-04-04 after roadmap creation*
