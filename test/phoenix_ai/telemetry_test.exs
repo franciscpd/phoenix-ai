@@ -30,7 +30,9 @@ defmodule PhoenixAI.TelemetryTest do
       attach_collector(self(), [:phoenix_ai, :chat, :start])
       attach_collector(self(), [:phoenix_ai, :chat, :stop])
 
-      set_responses([{:ok, %Response{content: "hello", usage: %{total_tokens: 10}}}])
+      set_responses([
+        {:ok, %Response{content: "hello", usage: %PhoenixAI.Usage{total_tokens: 10}}}
+      ])
 
       AI.chat([%Message{role: :user, content: "hi"}],
         provider: :test,

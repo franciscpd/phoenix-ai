@@ -146,7 +146,7 @@ defmodule PhoenixAI.Providers.TestProviderTest do
   describe "stream/3" do
     test "emits one StreamChunk per grapheme then a final stop chunk" do
       content = "Hi!"
-      response = %Response{content: content, usage: %{tokens: 3}}
+      response = %Response{content: content, usage: %PhoenixAI.Usage{total_tokens: 3}}
       TestProvider.put_responses(self(), [{:ok, response}])
 
       test_pid = self()
@@ -178,7 +178,9 @@ defmodule PhoenixAI.Providers.TestProviderTest do
       end)
 
       stop_chunk = List.last(received)
-      assert %StreamChunk{finish_reason: "stop", usage: %{tokens: 3}} = stop_chunk
+
+      assert %StreamChunk{finish_reason: "stop", usage: %PhoenixAI.Usage{total_tokens: 3}} =
+               stop_chunk
     end
 
     test "propagates error from chat/2 when queue is exhausted" do
