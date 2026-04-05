@@ -10,6 +10,7 @@ defmodule PhoenixAI.Response do
           usage: Usage.t(),
           finish_reason: String.t() | nil,
           model: String.t() | nil,
+          provider: atom() | nil,
           provider_response: map()
         }
 
@@ -18,6 +19,7 @@ defmodule PhoenixAI.Response do
     :parsed,
     :finish_reason,
     :model,
+    :provider,
     tool_calls: [],
     usage: %Usage{},
     provider_response: %{}
