@@ -91,7 +91,7 @@ defmodule PhoenixAI.Providers.TestProvider do
   end
 
   @impl PhoenixAI.Provider
-  def parse_response(body), do: body
+  def parse_response(body), do: %{body | provider: :test}
 
   @impl PhoenixAI.Provider
   def format_tools(tools), do: Enum.map(tools, fn mod -> %{"name" => mod.name()} end)

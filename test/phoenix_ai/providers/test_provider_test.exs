@@ -52,6 +52,14 @@ defmodule PhoenixAI.Providers.TestProviderTest do
       assert {:ok, %Response{content: "a"}} = TestProvider.chat([], [])
       assert {:ok, %Response{content: "b"}} = TestProvider.chat([], [])
     end
+
+    test "parse_response/1 sets provider to :test" do
+      body = %Response{content: "hello"}
+      result = TestProvider.parse_response(body)
+
+      assert result.provider == :test
+      assert result.content == "hello"
+    end
   end
 
   # ---------------------------------------------------------------------------
