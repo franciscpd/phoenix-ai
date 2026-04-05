@@ -36,22 +36,12 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - ✓ ContentFilter policy with pre/post user-provided function hooks — v0.3.0
 - ✓ ToolPolicy with allowlist/denylist modes — v0.3.0
 - ✓ Composable presets (:default, :strict, :permissive) — v0.3.0
-
-## Current Milestone: v0.3.1 Provider Field
-
-**Goal:** Add `:provider` field to `Response` struct so downstream consumers can identify the provider without extra configuration.
-
-**Target features:**
-- Add `:provider` field to `Response` struct
-- Populate `:provider` in all provider adapters (`parse_response/1`)
-- Tests per provider asserting `response.provider` is set
-- Version bump to 0.3.1
+- ✓ `Response.provider` field identifying originating provider atom — v0.3.1
+- ✓ All adapters set `:provider` in `parse_response/1` — v0.3.1
 
 ### Active
 
-- [ ] Add `:provider` field to `Response` struct, populated by each adapter in `parse_response/1`
-- [ ] Tests per provider verifying `response.provider` is correctly set
-- [ ] Version bump to 0.3.1 in `mix.exs`
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -68,7 +58,7 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 
 - **Origin:** The author is building "Chico", a micro-SaaS personal assistant currently in Laravel using laravel/ai. Once validated, the plan is to port to Phoenix/Elixir for native concurrency and scalability.
 - **Reference implementation:** [laravel/ai](https://github.com/laravel/ai) — the API surface and provider abstraction are the primary inspiration.
-- **Current state:** v0.3.0 shipped. ~3,800 LOC lib, ~5,400 LOC tests, 421 tests passing. Published at https://hex.pm/packages/phoenix_ai.
+- **Current state:** v0.3.1 shipped. ~3,900 LOC lib, ~5,400 LOC tests, 422 tests passing. Published at https://hex.pm/packages/phoenix_ai.
 - **PRD source:** Guardrails PRD defined in `phoenix_ai_store/.planning/phases/05-guardrails/BRAINSTORM.md` — stateless core policies go here, stateful policies (TokenBudget, CostBudget) stay in phoenix_ai_store.
 - **Tech stack:** Elixir, Req (sync HTTP), Finch (SSE streaming), Jason, NimbleOptions, Telemetry.
 
@@ -99,6 +89,8 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 | JailbreakDetector behaviour decoupled from policy | Detector reports score+patterns, policy decides halt | ✓ Good — each independently testable with Mox |
 | {:halt, violation} internal / {:error, violation} external | Struct type discriminates policy rejection from provider error | ✓ Good — clean boundary |
 | Stateful policies deferred to phoenix_ai_store | TokenBudget/CostBudget need persistence layer | ✓ Good — keeps core library dependency-free |
+| Provider field in adapters, not central dispatch | Each adapter owns its complete Response — consistent with Usage pattern | ✓ Good — no coupling to lib/ai.ex |
+| Telemetry already has :provider | do_chat/2 sets meta with provider_atom from opts — no duplication needed | ✓ Good — avoided unnecessary scope |
 
 ## Evolution
 
@@ -119,4 +111,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-05 after v0.3.1 milestone start*
+*Last updated: 2026-04-05 after v0.3.1 milestone completion*

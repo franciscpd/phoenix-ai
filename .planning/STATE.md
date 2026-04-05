@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.3.1
 milestone_name: Provider Field
-status: planning
-stopped_at: Phase 18 context gathered
-last_updated: "2026-04-05T02:43:43.342Z"
-last_activity: 2026-04-05 — Roadmap created, Phase 18 ready for planning
+status: complete
+stopped_at: Milestone complete
+last_updated: "2026-04-05T03:10:00.000Z"
+last_activity: 2026-04-05 — Milestone v0.3.1 completed and archived
 progress:
   total_phases: 1
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 100
 ---
 
 # Project State
@@ -21,32 +21,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Developers can build AI-powered agents with skills, sequential pipelines, and parallel execution using idiomatic Elixir/Phoenix patterns and BEAM concurrency primitives.
-**Current focus:** Phase 18 — Provider Field (v0.3.1)
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 18 of 18 (Provider Field)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-04-05 — Roadmap created, Phase 18 ready for planning
+Phase: — (milestone complete)
+Plan: —
+Status: v0.3.1 shipped, ready for next milestone
+Last activity: 2026-04-05 — Milestone v0.3.1 completed and archived
 
-Progress: [░░░░░░░░░░] 0%
+```
+Progress: [██████████] 100% (1/1 phases)
+```
 
-## Performance Metrics
+## Session Continuity
 
-**Velocity:**
-
-- Total plans completed: 0 (this milestone)
-- Average duration: —
-- Total execution time: —
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 18 | TBD | — | — |
-
-**Recent Trend:** Not started
+Last session: 2026-04-05T03:10:00.000Z
+Stopped at: Milestone complete
+Resume file: —
+Next action: `/gsd-new-milestone`
 
 ## Accumulated Context
 
@@ -59,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - v0.3.0: Pipeline executor must be a pure function in the caller's process — GenServer for pipeline is an explicit anti-pattern
 - v0.3.0: `JailbreakDetector` behaviour decouples detection algorithm from `JailbreakDetection` policy — each independently testable with Mox
 - v0.3.0: Policies return `{:halt, %PolicyViolation{}}` internally; executor maps to `{:error, %PolicyViolation{}}` at the boundary — struct type is the discriminator vs provider errors
+- v0.3.1: Provider field set in each adapter's parse_response/1, not centrally — consistent with Usage normalization pattern
 
 ### Pending Todos
 
@@ -67,10 +61,3 @@ None.
 ### Blockers/Concerns
 
 None.
-
-## Session Continuity
-
-Last session: 2026-04-05T02:43:43.340Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/phases/18-provider-field/18-CONTEXT.md
-Next action: `/gsd-plan-phase 18`

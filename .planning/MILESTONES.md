@@ -1,5 +1,30 @@
 # Milestones
 
+## v0.3.1 — Provider Field
+
+**Shipped:** 2026-04-05
+**Phases:** 1 | **Plans:** 1 | **Tests:** 422 (1 new + 4 assertions)
+**Timeline:** 1 day (Apr 5, 2026)
+**Stats:** +98 LOC, 8 commits, 12 files changed
+
+### Key Accomplishments
+
+1. `Response` struct gains `provider: atom() | nil` field — enables downstream cost tracking without extra user configuration
+2. All 4 provider adapters (OpenAI, Anthropic, OpenRouter, TestProvider) set provider atom in `parse_response/1`
+3. TestProvider evolved from passthrough to merge pattern (`%{body | provider: :test}`)
+4. Discovered telemetry already carries `:provider` in metadata — avoided unnecessary scope expansion
+
+### Tech Debt
+
+None incurred.
+
+### Archive
+
+- [Roadmap](milestones/v0.3.1-ROADMAP.md)
+- [Requirements](milestones/v0.3.1-REQUIREMENTS.md)
+
+---
+
 ## v0.3.0 — Guardrails
 
 **Shipped:** 2026-04-05
