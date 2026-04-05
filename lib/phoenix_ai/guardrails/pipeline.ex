@@ -34,16 +34,53 @@ defmodule PhoenixAI.Guardrails.Pipeline do
   def run([], %Request{} = request), do: {:ok, request}
 
   def run(policies, %Request{} = request) when is_list(policies) do
+    meta = %{policy_count: length(policies)}
+
+    :telemetry.span([:phoenix_ai, :guardrails, :check], meta, fn ->
+      result = execute_policies(policies, request)
+      {result, meta}
+    end)
+  end
+
+  defp execute_policies(policies, request) do
     Enum.reduce_while(policies, {:ok, request}, fn {module, opts}, {:ok, req} ->
-      case module.check(req, opts) do
+      start_time = System.monotonic_time()
+      policy_result = module.check(req, opts)
+      duration = System.monotonic_time() - start_time
+
+      case policy_result do
         {:ok, %Request{} = updated_req} ->
+          emit_policy_event(module, :pass, duration)
           {:cont, {:ok, updated_req}}
 
         {:halt, %PolicyViolation{} = violation} ->
+          emit_policy_event(module, :violation, duration)
+          maybe_emit_jailbreak(violation)
           {:halt, {:error, violation}}
       end
     end)
   end
+
+  defp emit_policy_event(module, result, duration) do
+    :telemetry.execute(
+      [:phoenix_ai, :guardrails, :policy, :stop],
+      %{duration: duration},
+      %{policy: module, result: result}
+    )
+  end
+
+  defp maybe_emit_jailbreak(%PolicyViolation{
+         policy: PhoenixAI.Guardrails.Policies.JailbreakDetection,
+         metadata: meta
+       }) do
+    :telemetry.execute(
+      [:phoenix_ai, :guardrails, :jailbreak, :detected],
+      %{},
+      %{score: meta[:score], threshold: meta[:threshold], patterns: meta[:patterns]}
+    )
+  end
+
+  defp maybe_emit_jailbreak(_violation), do: :ok
 
   alias PhoenixAI.Guardrails.Policies.{ContentFilter, JailbreakDetection, ToolPolicy}
 
