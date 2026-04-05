@@ -1,7 +1,7 @@
 defmodule PhoenixAI.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
   @source_url "https://github.com/franciscpd/phoenix-ai"
 
   def project do
@@ -75,7 +75,8 @@ defmodule PhoenixAI.MixProject do
         "guides/cookbook/rag-pipeline.md",
         "guides/cookbook/multi-agent-team.md",
         "guides/cookbook/streaming-liveview.md",
-        "guides/cookbook/custom-tools.md"
+        "guides/cookbook/custom-tools.md",
+        "guides/guardrails.md"
       ],
       groups_for_extras: [
         Guides: ~r/guides\/[^\/]+\.md$/,
@@ -86,6 +87,7 @@ defmodule PhoenixAI.MixProject do
         Providers: [~r/PhoenixAI\.Providers\./],
         "Tools & Agent": [PhoenixAI.Tool, PhoenixAI.Agent, PhoenixAI.ToolLoop],
         Orchestration: [PhoenixAI.Pipeline, PhoenixAI.Team],
+        Guardrails: [~r/PhoenixAI\.Guardrails\./],
         Streaming: [PhoenixAI.Stream, PhoenixAI.StreamChunk],
         "Schema & Config": [PhoenixAI.Schema, PhoenixAI.Config],
         Testing: [PhoenixAI.Test, PhoenixAI.Providers.TestProvider]

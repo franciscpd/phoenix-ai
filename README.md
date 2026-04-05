@@ -16,6 +16,7 @@ PhoenixAI provides a unified API for interacting with multiple AI providers, def
 - **Agents** — Stateful GenServer-based agents with conversation history
 - **Pipelines** — Sequential step composition with context passing
 - **Teams** — Parallel agent execution using `Task.async_stream`
+- **Guardrails** — Pre-call policy pipeline with jailbreak detection, content filtering, and tool allowlists/denylists
 - **Telemetry** — Built-in `:telemetry` spans for observability
 - **TestProvider** — Offline testing with scripted responses
 
@@ -26,7 +27,7 @@ Add `phoenix_ai` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:phoenix_ai, "~> 0.2.0"}
+    {:phoenix_ai, "~> 0.3.0"}
   ]
 end
 ```
@@ -56,6 +57,7 @@ IO.puts(response.content)
 - [Provider Setup](https://hexdocs.pm/phoenix_ai/provider-setup.html)
 - [Agents and Tools](https://hexdocs.pm/phoenix_ai/agents-and-tools.html)
 - [Pipelines and Teams](https://hexdocs.pm/phoenix_ai/pipelines-and-teams.html)
+- [Guardrails](https://hexdocs.pm/phoenix_ai/guardrails.html)
 
 ## License
 

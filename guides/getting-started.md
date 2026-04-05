@@ -10,7 +10,7 @@ Add `phoenix_ai` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:phoenix_ai, "~> 0.1"}
+    {:phoenix_ai, "~> 0.3"}
   ]
 end
 ```
@@ -184,3 +184,4 @@ end
 - [Provider Setup](provider-setup.md) — Configure OpenAI, Anthropic, OpenRouter, and the TestProvider
 - [Agents & Tools](agents-and-tools.md) — Build stateful agents with tool calling
 - [Pipelines & Teams](pipelines-and-teams.md) — Compose multi-step and parallel AI workflows
+- [Guardrails](guardrails.md) — Add safety policies before AI calls
