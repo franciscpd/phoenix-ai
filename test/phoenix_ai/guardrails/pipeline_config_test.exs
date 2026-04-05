@@ -2,7 +2,7 @@ defmodule PhoenixAI.Guardrails.PipelineConfigTest do
   use ExUnit.Case, async: true
 
   alias PhoenixAI.Guardrails.Pipeline
-  alias PhoenixAI.Guardrails.Policies.{ContentFilter, JailbreakDetection, ToolPolicy}
+  alias PhoenixAI.Guardrails.Policies.{ContentFilter, JailbreakDetection}
 
   describe "from_config/1 with preset" do
     test "resolves :default preset" do
