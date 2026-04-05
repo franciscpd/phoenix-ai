@@ -37,9 +37,21 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - ✓ ToolPolicy with allowlist/denylist modes — v0.3.0
 - ✓ Composable presets (:default, :strict, :permissive) — v0.3.0
 
+## Current Milestone: v0.3.1 Provider Field
+
+**Goal:** Add `:provider` field to `Response` struct so downstream consumers can identify the provider without extra configuration.
+
+**Target features:**
+- Add `:provider` field to `Response` struct
+- Populate `:provider` in all provider adapters (`parse_response/1`)
+- Tests per provider asserting `response.provider` is set
+- Version bump to 0.3.1
+
 ### Active
 
-(None — planning next milestone)
+- [ ] Add `:provider` field to `Response` struct, populated by each adapter in `parse_response/1`
+- [ ] Tests per provider verifying `response.provider` is correctly set
+- [ ] Version bump to 0.3.1 in `mix.exs`
 
 ### Out of Scope
 
@@ -107,4 +119,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-05 after v0.3.0 milestone completion*
+*Last updated: 2026-04-05 after v0.3.1 milestone start*
