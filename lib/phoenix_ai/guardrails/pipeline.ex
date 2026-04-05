@@ -112,24 +112,33 @@ defmodule PhoenixAI.Guardrails.Pipeline do
 
   defp execute_policies(policies, request) do
     Enum.reduce_while(policies, {:ok, request}, fn {module, opts}, {:ok, req} ->
+      emit_policy_start(module)
       start_time = System.monotonic_time()
       policy_result = module.check(req, opts)
       duration = System.monotonic_time() - start_time
 
       case policy_result do
         {:ok, %Request{} = updated_req} ->
-          emit_policy_event(module, :pass, duration)
+          emit_policy_stop(module, :pass, duration)
           {:cont, {:ok, updated_req}}
 
         {:halt, %PolicyViolation{} = violation} ->
-          emit_policy_event(module, :violation, duration)
+          emit_policy_stop(module, :violation, duration)
           maybe_emit_jailbreak(violation)
           {:halt, {:error, violation}}
       end
     end)
   end
 
-  defp emit_policy_event(module, result, duration) do
+  defp emit_policy_start(module) do
+    :telemetry.execute(
+      [:phoenix_ai, :guardrails, :policy, :start],
+      %{},
+      %{policy: module}
+    )
+  end
+
+  defp emit_policy_stop(module, result, duration) do
     :telemetry.execute(
       [:phoenix_ai, :guardrails, :policy, :stop],
       %{duration: duration},
