@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An Elixir library that provides a unified API for AI provider integration (OpenAI, Anthropic, OpenRouter) with tool calling, streaming, structured output, stateful agents, sequential pipelines, parallel team execution, and normalized token usage — all built on BEAM/OTP concurrency primitives.
+An Elixir library that provides a unified API for AI provider integration (OpenAI, Anthropic, OpenRouter) with tool calling, streaming, structured output, stateful agents, sequential pipelines, parallel team execution, normalized token usage, and pre-call guardrails — all built on BEAM/OTP concurrency primitives.
 
 ## Core Value
 
@@ -27,18 +27,19 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 - ✓ `Response.usage` and `StreamChunk.usage` carry `Usage.t()` — v0.2.0
 - ✓ All adapters normalize usage at parse time — v0.2.0
 - ✓ Backward compatibility via `provider_specific` field — v0.2.0
+- ✓ Policy behaviour with middleware-chain halt semantics — v0.3.0
+- ✓ Request struct for guardrails pipeline context — v0.3.0
+- ✓ PolicyViolation struct for structured error reporting — v0.3.0
+- ✓ Pipeline executor with ordered policy chain — v0.3.0
+- ✓ JailbreakDetector behaviour + default keyword-based implementation — v0.3.0
+- ✓ JailbreakDetection policy with scope/threshold config — v0.3.0
+- ✓ ContentFilter policy with pre/post user-provided function hooks — v0.3.0
+- ✓ ToolPolicy with allowlist/denylist modes — v0.3.0
+- ✓ Composable presets (:default, :strict, :permissive) — v0.3.0
 
 ### Active
 
-- [ ] Policy behaviour with middleware-chain halt semantics
-- [ ] Request struct for guardrails pipeline context
-- [ ] PolicyViolation struct for structured error reporting
-- [ ] Pipeline executor with ordered policy chain
-- [ ] JailbreakDetector behaviour + default keyword-based implementation
-- [ ] JailbreakDetection policy with scope/threshold config
-- [ ] ContentFilter policy with pre/post user-provided function hooks
-- [ ] ToolPolicy with allowlist/denylist modes
-- [ ] Composable presets (:default, :strict, :permissive)
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -55,7 +56,7 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 
 - **Origin:** The author is building "Chico", a micro-SaaS personal assistant currently in Laravel using laravel/ai. Once validated, the plan is to port to Phoenix/Elixir for native concurrency and scalability.
 - **Reference implementation:** [laravel/ai](https://github.com/laravel/ai) — the API surface and provider abstraction are the primary inspiration.
-- **Current state:** v0.2.0 shipped. 2,776 LOC lib, 4,752 LOC tests, 326 tests passing. Published at https://hex.pm/packages/phoenix_ai.
+- **Current state:** v0.3.0 shipped. ~3,800 LOC lib, ~5,400 LOC tests, 421 tests passing. Published at https://hex.pm/packages/phoenix_ai.
 - **PRD source:** Guardrails PRD defined in `phoenix_ai_store/.planning/phases/05-guardrails/BRAINSTORM.md` — stateless core policies go here, stateful policies (TokenBudget, CostBudget) stay in phoenix_ai_store.
 - **Tech stack:** Elixir, Req (sync HTTP), Finch (SSE streaming), Jason, NimbleOptions, Telemetry.
 
@@ -82,6 +83,10 @@ Developers can build AI-powered agents with skills, sequential pipelines, and pa
 | Explicit atom dispatch for Usage | `from_provider(:openai, raw)` consistent with Error struct pattern | ✓ Good — idiomatic multi-clause |
 | OpenRouter own parse_chunk | Each adapter uses its own provider atom for consistency | ✓ Good — no delegation ambiguity |
 | Generic fallback in from_provider | Unknown providers auto-detected by key conventions | ✓ Good — zero-config for OpenAI-compatible providers |
+| Guardrails as stateless pure functions | No GenServer/ETS — policies run in caller's process | ✓ Good — OTP-idiomatic, no hidden state |
+| JailbreakDetector behaviour decoupled from policy | Detector reports score+patterns, policy decides halt | ✓ Good — each independently testable with Mox |
+| {:halt, violation} internal / {:error, violation} external | Struct type discriminates policy rejection from provider error | ✓ Good — clean boundary |
+| Stateful policies deferred to phoenix_ai_store | TokenBudget/CostBudget need persistence layer | ✓ Good — keeps core library dependency-free |
 
 ## Evolution
 
@@ -101,19 +106,5 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-## Current Milestone: v0.3.0 Guardrails
 
-**Goal:** Add a middleware-chain policy system for pre-call guardrails — enforcing jailbreak detection, content filtering, tool allowlists/denylists, and composable presets.
-
-**Target features:**
-- Policy behaviour (`check/2` callback with halt semantics)
-- Request struct (guardrails pipeline context)
-- PolicyViolation struct (structured error reporting)
-- Pipeline executor (ordered policy chain, halt-on-first-violation)
-- JailbreakDetector behaviour + default keyword-based implementation
-- JailbreakDetection policy (wraps detector with scope/threshold config)
-- ContentFilter policy (pre/post user-provided function hooks)
-- ToolPolicy (allowlist/denylist for tool calls)
-- Presets (:default, :strict, :permissive)
-
-*Last updated: 2026-04-04 after v0.3.0 milestone start*
+*Last updated: 2026-04-05 after v0.3.0 milestone completion*

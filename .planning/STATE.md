@@ -2,44 +2,44 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Guardrails
-status: planning
-stopped_at: Phase 17 context gathered
-last_updated: "2026-04-05T00:36:33.651Z"
-last_activity: 2026-04-04 — Roadmap created for v0.3.0
+status: complete
+stopped_at: Milestone complete
+last_updated: "2026-04-05T01:45:00.000Z"
+last_activity: 2026-04-05 — Milestone v0.3.0 completed and archived
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 5
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-04)
+See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Developers can build AI-powered agents with skills, sequential pipelines, and parallel execution using idiomatic Elixir/Phoenix patterns and BEAM concurrency primitives.
-**Current focus:** Milestone v0.3.0 — Guardrails
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 13 — Core Contracts (not started)
+Phase: — (milestone complete)
 Plan: —
-Status: Roadmap approved, ready to plan Phase 13
-Last activity: 2026-04-04 — Roadmap created for v0.3.0
+Status: v0.3.0 shipped, ready for next milestone
+Last activity: 2026-04-05 — Milestone v0.3.0 completed and archived
 
 ```
-Progress: [░░░░░░░░░░] 0% (0/5 phases)
+Progress: [██████████] 100% (5/5 phases)
 ```
 
 ## Session Continuity
 
-Last session: 2026-04-05T00:36:33.649Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-presets-telemetry-and-config/17-CONTEXT.md
-Next action: `/gsd:plan-phase 13`
+Last session: 2026-04-05T01:45:00.000Z
+Stopped at: Milestone complete
+Resume file: —
+Next action: `/gsd:new-milestone`
 
 ## Accumulated Context
 
@@ -52,12 +52,10 @@ Next action: `/gsd:plan-phase 13`
 - v0.3.0: Pipeline executor must be a pure function in the caller's process — GenServer for pipeline is an explicit anti-pattern
 - v0.3.0: `JailbreakDetector` behaviour decouples detection algorithm from `JailbreakDetection` policy — each independently testable with Mox
 - v0.3.0: Policies return `{:halt, %PolicyViolation{}}` internally; executor maps to `{:error, %PolicyViolation{}}` at the boundary — struct type is the discriminator vs provider errors
-- v0.3.0: No new runtime dependencies — `Enum.reduce_while/3`, `@behaviour`, `defstruct` cover the entire implementation; `nimble_options` and `telemetry` already in deps
-- v0.3.0: Phase 5 (Agent Integration) flagged in research as the only phase touching existing production code — approach `Agent.handle_call/3` opts schema extension carefully
 
 ### Pending Todos
 
-- Review `PhoenixAI.Agent` NimbleOptions schema before planning Phase 17 to confirm `:guardrails` opts slot in without breaking existing call sites
+None.
 
 ### Blockers/Concerns
 

@@ -1,5 +1,28 @@
 # Milestones
 
+## v0.3.0 — Guardrails
+
+**Shipped:** 2026-04-05
+**Phases:** 5 | **Plans:** 5 | **Tests:** 421 (109 new)
+**Timeline:** 1 day (Apr 4, 2026)
+**Stats:** 1,005 LOC (guardrails lib), 680 LOC (guardrails tests), 49 commits
+
+### Key Accomplishments
+
+1. `Guardrails.Pipeline.run/2` policy middleware chain with halt-on-first-violation using `Enum.reduce_while/3`
+2. `Policy` behaviour, `Request` struct, `PolicyViolation` struct — composable contracts for all guardrail policies
+3. `JailbreakDetector` behaviour + default keyword detector with 4 scoring categories (role override, instruction override, DAN patterns, base64 evasion)
+4. `JailbreakDetection` policy with configurable `:detector`, `:scope`, `:threshold` — swappable ML detectors via behaviour
+5. `ContentFilter` policy with pre/post function hooks and `ToolPolicy` with allowlist/denylist enforcement
+6. Named presets (`:default`, `:strict`, `:permissive`), `from_config/1` with NimbleOptions validation, and full telemetry instrumentation (pipeline span + per-policy events + jailbreak detection)
+
+### Tech Debt
+
+- `Request.halted` and `Request.violation` fields defined but unused by pipeline executor (future consumer use)
+- `PhoenixAI.Conversation` stub module — dead code carried from v0.1.0
+
+---
+
 ## v0.2.0 — Usage Normalization
 
 **Shipped:** 2026-04-04
