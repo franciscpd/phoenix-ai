@@ -26,8 +26,15 @@ defmodule PhoenixAI.Providers.TestProvider do
 
   def stop_state(pid) do
     case GenServer.whereis(via(pid)) do
-      nil -> :ok
-      agent_pid -> Agent.stop(agent_pid)
+      nil ->
+        :ok
+
+      agent_pid ->
+        try do
+          Agent.stop(agent_pid)
+        catch
+          :exit, _ -> :ok
+        end
     end
   end
 
