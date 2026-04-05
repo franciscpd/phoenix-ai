@@ -44,4 +44,20 @@ defmodule PhoenixAI.Guardrails.Pipeline do
       end
     end)
   end
+
+  alias PhoenixAI.Guardrails.Policies.{ContentFilter, JailbreakDetection, ToolPolicy}
+
+  @doc """
+  Returns a named preset policy list.
+
+  ## Presets
+
+    * `:default` — JailbreakDetection only (minimal safety)
+    * `:strict` — All three policies (maximum protection)
+    * `:permissive` — JailbreakDetection with high threshold (reduced false positives)
+  """
+  @spec preset(:default | :strict | :permissive) :: [policy_entry()]
+  def preset(:default), do: [{JailbreakDetection, []}]
+  def preset(:strict), do: [{JailbreakDetection, []}, {ContentFilter, []}, {ToolPolicy, []}]
+  def preset(:permissive), do: [{JailbreakDetection, [threshold: 0.9]}]
 end
