@@ -37,6 +37,7 @@ defmodule PhoenixAI.Providers.OpenRouter do
       content: content,
       finish_reason: finish_reason,
       model: model,
+      provider: :openrouter,
       usage: usage,
       tool_calls: tool_calls,
       provider_response: body
