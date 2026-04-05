@@ -61,6 +61,7 @@ defmodule PhoenixAI.Providers.OpenAI do
       content: content,
       finish_reason: finish_reason,
       model: model,
+      provider: :openai,
       usage: usage,
       tool_calls: tool_calls,
       provider_response: body
