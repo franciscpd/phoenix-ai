@@ -214,6 +214,7 @@ defmodule PhoenixAI.Providers.Anthropic do
       content: final_content,
       finish_reason: stop_reason,
       model: model,
+      provider: :anthropic,
       usage: usage,
       tool_calls: tool_calls,
       provider_response: body

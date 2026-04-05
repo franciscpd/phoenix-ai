@@ -23,6 +23,7 @@ defmodule PhoenixAI.Providers.AnthropicTest do
       assert response.usage.output_tokens == 9
       assert response.tool_calls == []
       assert response.provider_response == fixture
+      assert response.provider == :anthropic
     end
 
     test "parses a response with tool_use blocks" do
